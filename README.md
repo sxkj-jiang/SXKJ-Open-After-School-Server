@@ -243,17 +243,17 @@ H5端：
 + <font style="color:rgb(64, 72, 91);">JDK 1.8（推荐 1.8.0_131+）</font>
 + <font style="color:rgb(64, 72, 91);">Maven 3.6+</font>
 + <font style="color:rgb(64, 72, 91);">MySQL 5.7+ / Redis 5.0+ / FastDFS 6.x</font>
-+ <font style="color:rgb(64, 72, 91);">复制根目录 </font>`<font style="color:rgb(64, 72, 91);">.env.example</font>`<font style="color:rgb(64, 72, 91);"> 为 </font>`<font style="color:rgb(64, 72, 91);">.env</font>`<font style="color:rgb(64, 72, 91);">，填入本地环境真实值（</font>`<font style="color:rgb(64, 72, 91);">.env</font>`<font style="color:rgb(64, 72, 91);"> 不会提交）</font>
++ <font style="color:rgb(64, 72, 91);">复制根目录 </font>`.env.example`<font style="color:rgb(64, 72, 91);"> 为 </font>`.env`<font style="color:rgb(64, 72, 91);">，填入本地环境真实值（</font>`<font style="color:rgb(64, 72, 91);">.env</font>`<font style="color:rgb(64, 72, 91);"> 不会提交）</font>
 
 ## <font style="color:rgb(64, 72, 91);">3. 分支模型</font>
-| <font style="color:rgb(64, 72, 91);">分支</font> | <font style="color:rgb(64, 72, 91);">用途</font> | <font style="color:rgb(64, 72, 91);">保护</font> |
+| <font style="color:rgb(64, 72, 91);">分支</font> | 用途</font> | <font style="color:rgb(64, 72, 91);">保护</font> |
 | --- | --- | --- |
-| `<font style="color:rgb(64, 72, 91);">master</font>` | <font style="color:rgb(64, 72, 91);">主线，仅接受发版合并</font> | <font style="color:rgb(64, 72, 91);">禁止直接推送</font> |
-| `<font style="color:rgb(64, 72, 91);">release1.0</font>` | <font style="color:rgb(64, 72, 91);">开发测试环境版本</font> | <font style="color:rgb(64, 72, 91);">禁止直接推送</font> |
-| `<font style="color:rgb(64, 72, 91);">develop</font>` | <font style="color:rgb(64, 72, 91);">测试环境稳定版</font> | <font style="color:rgb(64, 72, 91);">禁止直接推送</font> |
+| `<font style="color:rgb(64, 72, 91);">master</font>` | 主线，仅接受发版合并 | 禁止直接推送 |
+| `<font style="color:rgb(64, 72, 91);">release1.0</font>` | 开发测试环境版本 | 禁止直接推送 |
+| `<font style="color:rgb(64, 72, 91);">develop</font>` | 测试环境稳定版 | 禁止直接推送 |
 
 
-<font style="color:rgb(64, 72, 91);">功能开发请从 </font>`<font style="color:rgb(64, 72, 91);">release1.0</font>`<font style="color:rgb(64, 72, 91);"> 切出特性分支：</font>
+<font style="color:rgb(64, 72, 91);">功能开发请从 </font>`release1.0`<font style="color:rgb(64, 72, 91);"> 切出特性分支：</font>
 
 ```bash
 git checkout release1.0
