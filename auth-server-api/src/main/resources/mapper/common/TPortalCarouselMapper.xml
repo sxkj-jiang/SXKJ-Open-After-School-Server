@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.mapper.website.TPortalCarouselMapper">
+
+    <select id="selectPortalCarouselList" resultType="com.sxkj.edu.domain.base.mult.TPortalCarouselVO">
+        select c.id id,
+        c.cul_num culNum,
+        c.cul_name culName,
+        c.sort sort,
+        f.file_url culUrl,
+        c.cul_desc culDesc,
+        c.status status,
+        c.art_type artType,
+        c.link_url,
+        c.publish_date publishDate
+        from t_portal_carousel c
+        left join t_base_file f on c.cul_url_id = f.id and f.is_valid = 1
+        where  c.is_valid=1
+        <if test="query.schoolId != null and query.schoolId != 0">
+            and c.school_id = #{query.schoolId}
+        </if>
+        <if test="query.keyword != null and query.keyword != ''">
+            and (
+            c.cul_name like concat('%', #{query.keyword}, '%')
+            or c.cul_num like concat('%', #{query.keyword}, '%')
+            )
+        </if>
+        <if test="query.status != null">
+            and c.status = #{query.status}
+        </if>
+        <if test="query.artType != null and query.artType != 0">
+            and c.art_type = #{query.artType}
+        </if>
+        <if test="query.culName != null and query.culName != ''">
+            and (
+            c.cul_name like concat('%', #{query.culName}, '%')
+            )
+        </if>
+        <if test="query.startTime != null and query.endTime != null">
+            and c.publish_date &gt; #{query.startTime}
+            and c.publish_date &lt; #{query.endTime}
+        </if>
+        order by c.sort asc, c.create_time desc
+    </select>
+
+    <select id="selectPortalCarouselDetail" resultType="com.sxkj.edu.domain.base.mult.TPortalCarouselVO">
+        select c.id id,
+        c.cul_num culNum,
+        c.cul_name culName,
+        c.sort sort,
+        f.file_url culUrl,
+        c.cul_desc culDesc,
+        c.status status,
+        c.art_type artType,
+        c.link_url,
+        c.publish_date publishDate
+        from t_portal_carousel c,t_base_file f
+        where c.cul_url_id = f.id and c.is_valid=1
+        <if test="query.id != null and query.id != 0">
+            and c.id = #{query.id}
+        </if>
+        <if test="query.culNum != null">
+            and c.cul_num = #{query.culNum}
+        </if>
+    </select>
+</mapper>

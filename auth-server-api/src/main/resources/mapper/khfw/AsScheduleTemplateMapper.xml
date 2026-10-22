@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.afterschool.mapper.AsScheduleTemplateMapper">
+
+    <!-- 节次结果映射 -->
+    <resultMap id="PeriodResultMap" type="com.sxkj.edu.module.afterschool.domain.vo.AsSchedulePeriodVO">
+        <id column="period_id" property="id"/>
+        <result column="period_template_id" property="templateId"/>
+        <result column="period_school_id" property="schoolId"/>
+        <result column="time_block" property="timeBlock"/>
+        <result column="section_no" property="sectionNo"/>
+        <result column="section_name" property="sectionName"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+    </resultMap>
+
+    <!-- 分页查询 -->
+    <select id="pageList" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsScheduleTemplateVO">
+        SELECT
+            t.id,
+            t.school_id,
+            t.school_name,
+            t.template_type,
+            t.template_name,
+            t.enabled_status,
+            t.create_time,
+            sp.grade_scope_json ,
+            sp.day_scope_json,
+            sp.start_time,
+            sp.end_time
+        FROM
+            t_as_schedule_template t
+        LEFT JOIN t_as_schedule_period sp ON t.id = sp.template_id and sp.period_type = 2
+        <where>
+            t.is_valid = 1
+            <if test="query.schoolId != null">
+                AND t.school_id = #{query.schoolId}
+            </if>
+            <if test="query.templateName != null and query.templateName != ''">
+                AND t.template_name LIKE CONCAT('%', #{query.templateName}, '%')
+            </if>
+            <if test="query.templateType != null">
+                AND t.template_type = #{query.templateType}
+            </if>
+        </where>
+        GROUP BY t.id
+        ORDER BY t.create_time DESC
+    </select>
+
+</mapper>

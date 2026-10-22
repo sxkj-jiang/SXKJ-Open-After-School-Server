@@ -1,0 +1,27 @@
+package com.sxkj.edu.module.afterschool.domain.ao.evaluation;
+
+import io.swagger.annotations.ApiModel;
+import io.swagger.annotations.ApiModelProperty;
+import lombok.Data;
+
+import javax.validation.constraints.NotNull;
+import java.io.Serializable;
+import java.math.BigDecimal;
+
+@Data
+@ApiModel("提交评价AO")
+public class CaEvaluationAO implements Serializable {
+    private static final long serialVersionUID = 1L;
+    
+    @ApiModelProperty(value = "任务ID", required = true)
+    @NotNull(message = "任务ID不能为空")
+    private Long taskId;
+
+    @ApiModelProperty(value = "课程ID", required = true)
+    @NotNull(message = "课程ID不能为空")
+    private Long courseId;
+    
+    @ApiModelProperty("用户ID")
+    private Long userId;
+
+}

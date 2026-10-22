@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.business.dao.UserLoginLogDao">
+
+    <resultMap id="UserLoginLogEntity" type="com.sxkj.edu.domain.sys.entity.UserLoginLogEntity"></resultMap>
+
+
+    <select id="queryByPage" resultMap="UserLoginLogEntity">
+        select
+          id,
+          user_id,
+          user_name,
+          remote_ip,
+          remote_port,
+          remote_browser,
+          remote_os,
+          login_status,
+          update_time,
+          create_time
+        from t_user_login_log
+        <where>
+            <if test="queryDTO.startDate != null and queryDTO.startDate != ''">
+                AND DATE_FORMAT(create_time, '%Y-%m-%d') &gt;= #{queryDTO.startDate}
+            </if>
+            <if test="queryDTO.endDate != null and queryDTO.endDate != ''">
+                AND DATE_FORMAT(create_time, '%Y-%m-%d') &lt;= #{queryDTO.endDate}
+            </if>
+            <if test="queryDTO.userName != null and queryDTO.userName != ''">
+                AND INSTR(user_name,#{queryDTO.userName})
+            </if>
+        </where>
+        order by create_time desc
+    </select>
+
+    <select id="queryVisitRecordPage"
+            resultType="com.sxkj.edu.domain.vo.PlateVisitRecordStatisticsVo">
+        SELECT
+            MIN(ll.create_time) createTime,
+            ll.user_id,
+            u.actual_name AS userName,
+            ll.remote_ip,
+            ll.remote_browser,
+            ll.access_terminal,
+            ll.remote_os
+        FROM
+        t_user_login_log ll
+        left join t_base_user u on u.id = ll.user_id
+        where ll.login_type = 1 and ll.login_status = 1
+        <if test="query.visitRecordPlateType != null and query.visitRecordPlateType != ''">
+            AND ll.access_terminal = #{query.visitRecordPlateType}
+        </if>
+        <if test="query.visitRecordTimeType != null and query.visitRecordTimeType == 1">
+            AND DATE(ll.create_time ) = CURDATE()
+        </if>
+        <if test="query.visitRecordTimeType != null and query.visitRecordTimeType == 2">
+            AND YEARWEEK(ll.create_time, 1) = YEARWEEK(CURDATE(), 1)
+        </if>
+        <if test="query.visitRecordTimeType != null and query.visitRecordTimeType == 3">
+            AND YEAR(ll.create_time) = YEAR(CURDATE())
+            AND MONTH(ll.create_time) = MONTH(CURDATE())
+        </if>
+        <if test="query.visitRecordStartDate != null and query.visitRecordEndDate != null">
+            AND DATE(ll.create_time) BETWEEN #{query.visitRecordStartDate} AND #{query.visitRecordEndDate}
+        </if>
+        GROUP BY DATE(ll.create_time),ll.access_terminal,ll.remote_os
+        order by MIN(ll.create_time) desc
+    </select>
+</mapper>

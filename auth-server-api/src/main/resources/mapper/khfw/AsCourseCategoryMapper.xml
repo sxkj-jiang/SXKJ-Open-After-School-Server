@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.afterschool.mapper.AsCourseCategoryMapper">
+
+    <select id="pageList" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsCourseCategoryVO">
+        SELECT
+            c.id,
+            c.school_id,
+            c.parent_id,
+            c.category_code,
+            c.category_name,
+            c.enabled_status,
+            c.sort_no,
+            c.remark,
+            c.create_time,
+            u.actual_name createUser
+        FROM
+            t_as_course_category c
+        left join t_base_user u on c.create_user = u.id
+        <where>
+            c.is_valid = 1
+            <if test="query.schoolId != null">
+                AND c.school_id = #{query.schoolId}
+            </if>
+            <if test="query.categoryName != null and query.categoryName != ''">
+                AND c.category_name LIKE concat('%', #{query.categoryName}, '%')
+            </if>
+            <if test="query.enabledStatus != null">
+                AND c.enabled_status = #{query.enabledStatus}
+            </if>
+        </where>
+        ORDER BY c.sort_no ASC
+    </select>
+
+    <select id="selectDetail" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsCourseCategoryVO">
+        SELECT
+            c.id,
+            c.school_id,
+            c.parent_id,
+            c.category_code,
+            c.category_name,
+            c.enabled_status,
+            c.sort_no,
+            c.remark,
+            c.create_time,
+            c.create_user,
+            c.update_time
+        FROM
+            t_as_course_category c
+        WHERE c.id = #{id} AND c.is_valid = 1
+    </select>
+
+    <select id="selectDropList" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsCourseCategoryVO">
+        SELECT
+            c.id,
+            c.parent_id,
+            c.school_id,
+            c.category_code,
+            c.category_name,
+            c.sort_no
+        FROM
+            t_as_course_category c
+        <where>
+            c.is_valid = 1
+            AND c.enabled_status = 1
+            <if test="query.schoolId != null">
+                AND c.school_id = #{query.schoolId}
+            </if>
+            <if test="query.parentId != null">
+                AND c.parent_id = #{query.parentId}
+            </if>
+            <if test="query.onlyParent != null and query.onlyParent == 1">
+                AND c.parent_id is null
+            </if>
+            <if test="query.categoryName != null and query.categoryName != ''">
+                AND c.category_name LIKE concat('%', #{query.categoryName}, '%')
+            </if>
+        </where>
+        ORDER BY c.sort_no ASC
+    </select>
+
+    <select id="selectCategoryTree" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsCourseCategoryVO">
+        SELECT
+            c.id,
+            c.school_id,
+            c.parent_id,
+            c.category_code,
+            c.category_name,
+            c.enabled_status,
+            c.sort_no,
+            c.remark,
+            c.create_time,
+            u.actual_name AS createUser
+        FROM t_as_course_category c
+        LEFT JOIN t_base_user u ON c.create_user = u.id
+        <where>
+            c.is_valid = 1
+            <if test="query.schoolId != null">
+                AND c.school_id = #{query.schoolId}
+            </if>
+            <if test="query.categoryName != null and query.categoryName != ''">
+                AND c.category_name LIKE concat('%', #{query.categoryName}, '%')
+            </if>
+            <if test="query.enabledStatus != null">
+                AND c.enabled_status = #{query.enabledStatus}
+            </if>
+        </where>
+        ORDER BY c.sort_no ASC, c.id ASC
+    </select>
+
+</mapper>

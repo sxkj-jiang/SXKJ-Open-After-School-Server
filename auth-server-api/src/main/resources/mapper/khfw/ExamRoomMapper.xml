@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.afterschool.mapper.ExamRoomMapper">
+
+    <select id="pageExamRoomList" resultType="com.sxkj.edu.module.afterschool.domain.vo.ExamRoomVO">
+        SELECT
+            r.id,
+            r.school_id,
+            s.school_name,
+            r.room_name,
+            r.room_address,
+            r.room_number,
+            r.remark,
+            r.create_time,
+            r.update_time
+        FROM
+            t_exam_room r
+            LEFT JOIN t_school_manage s ON s.id = r.school_id
+        <where>
+            r.is_valid = 1
+            <if test="query.schoolId != null">
+                AND r.school_id = #{query.schoolId}
+            </if>
+            <if test="query.roomName != null and query.roomName != ''">
+                AND r.room_name LIKE concat('%', #{query.roomName}, '%')
+            </if>
+            <if test="query.roomAddress != null and query.roomAddress != ''">
+                AND r.room_address LIKE concat('%', #{query.roomAddress}, '%')
+            </if>
+            <if test="query.roomNumber != null and query.roomNumber != ''">
+                AND r.room_number LIKE concat('%', #{query.roomNumber}, '%')
+            </if>
+            <if test="query.createTimeStart != null and query.createTimeEnd != null">
+                AND r.create_time BETWEEN #{query.createTimeStart} AND #{query.createTimeEnd}
+            </if>
+        </where>
+        ORDER BY r.create_time DESC
+    </select>
+
+    <select id="selectExamRoomDetail" resultType="com.sxkj.edu.module.afterschool.domain.vo.ExamRoomVO">
+        SELECT
+            r.id,
+            r.school_id,
+            s.school_name,
+            r.room_name,
+            r.room_address,
+            r.room_number,
+            r.remark,
+            r.create_time,
+            r.update_time
+        FROM
+            t_exam_room r
+            LEFT JOIN t_school_manage s ON s.id = r.school_id
+        WHERE r.id = #{id} AND r.is_valid = 1
+    </select>
+
+</mapper>

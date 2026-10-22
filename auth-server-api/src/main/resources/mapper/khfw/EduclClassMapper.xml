@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.afterschool.mapper.EduclClassMapper">
+
+    <select id="pageList" resultType="com.sxkj.edu.module.afterschool.domain.vo.EduclClassVO">
+        SELECT
+            c.id,
+            c.school_id,
+            s.school_name,
+            c.class_name,
+            c.class_code,
+            c.grade_id,
+            g.grade_name,
+            c.head_teacher_id,
+            u.teacher_name AS head_teacher_name,
+            c.enrollment_year,
+            c.graduation_year,
+            c.create_time,
+            t.id AS termId,
+            t.term_name
+        FROM
+            t_educl_class c
+            LEFT JOIN t_educl_term t ON t.id = c.term_id and t.is_valid = 1
+            LEFT JOIN t_school_manage s ON s.id = c.school_id
+            LEFT JOIN t_educl_grade g ON g.id = c.grade_id
+            LEFT JOIN t_as_teacher u ON u.id = c.head_teacher_id
+        <where>
+            c.is_valid = 1
+            <if test="query.className != null and query.className != ''">
+                AND c.class_name LIKE concat('%', #{query.className}, '%')
+            </if>
+            <if test="query.schoolId != null and query.schoolId != 0">
+                AND c.school_id = #{query.schoolId}
+            </if>
+            <if test="query.gradeIds != null and query.gradeIds.size > 0">
+                AND c.grade_id IN
+                <foreach item="gradeId" collection="query.gradeIds" separator="," open="(" close=")">
+                    #{gradeId}
+                </foreach>
+            </if>
+            <if test="query.headTeacherId != null and query.headTeacherId != 0">
+                AND c.head_teacher_id = #{query.headTeacherId}
+            </if>
+            <if test="query.termId != null and query.termId != 0">
+                AND c.term_id = #{query.termId}
+            </if>
+            <if test="query.createTimeStart != null and query.createTimeEnd != null">
+                AND c.create_time BETWEEN #{query.createTimeStart} AND #{query.createTimeEnd}
+            </if>
+        </where>
+        ORDER BY c.create_time DESC
+    </select>
+
+    <select id="selectDetail" resultType="com.sxkj.edu.module.afterschool.domain.vo.EduclClassVO">
+        SELECT
+            c.id,
+            c.school_id,
+            s.school_name,
+            c.class_name,
+            c.class_code,
+            c.grade_id,
+            g.grade_name,
+            c.head_teacher_id,
+            u.teacher_name AS head_teacher_name,
+            us.id AS headTeacherUserId,
+            c.enrollment_year,
+            c.graduation_year,
+            c.remark,
+            c.class_count,
+            c.create_time,
+            c.update_time,
+            t.id AS termId,
+            t.term_name
+        FROM
+            t_educl_class c
+            LEFT JOIN t_educl_term t ON t.id = c.term_id and t.is_valid = 1
+            LEFT JOIN t_school_manage s ON s.id = c.school_id
+            LEFT JOIN t_educl_grade g ON g.id = c.grade_id
+            LEFT JOIN t_as_teacher u ON u.id = c.head_teacher_id
+            LEFT JOIN t_base_user us on us.id = u.user_id
+        WHERE c.id = #{id} AND c.is_valid = 1
+    </select>
+    <select id="getHeadTeachersByCourse" resultType="java.lang.Long">
+        SELECT
+        DISTINCT t.user_id
+        FROM t_as_course_class cc
+         INNER JOIN t_as_course_category cg on cg.id = cc.category_id and cg.is_valid = 1
+         INNER JOIN t_as_student_destination sd on sd.course_class_id = cc.id and sd.is_valid = 1
+         INNER JOIN t_as_student stu on stu.id = sd.student_id and stu.register_status = 1 and stu.is_valid = 1
+         INNER JOIN t_educl_class c on c.id = stu.class_id and c.is_valid = 1
+         INNER JOIN t_as_teacher t on t.id = c.head_teacher_id and t.is_valid = 1 and t.user_id is not null
+        WHERE cc.is_valid = 1
+        <if test="categoryIdList != null and categoryIdList.size > 0">
+            AND cg.id IN
+            <foreach item="categoryId" collection="categoryIdList" separator="," open="(" close=")">
+                #{categoryId}
+            </foreach>
+        </if>
+        <if test="courseClassIdList != null and courseClassIdList.size > 0">
+            AND cc.id IN
+            <foreach item="courseClassId" collection="courseClassIdList" separator="," open="(" close=")">
+                #{courseClassId}
+            </foreach>
+        </if>
+    </select>
+    <select id="queryStudentsByClassIds"
+            resultType="com.sxkj.edu.module.afterschool.domain.vo.TeacherNoticeStudentVO">
+        SELECT
+            stu.id AS studentId,
+            gs.guardian_user_id AS userId
+        FROM t_educl_class c
+        INNER JOIN t_as_student stu ON stu.class_id = c.id and stu.register_status = 1 and stu.is_valid = 1
+        INNER JOIN t_as_guardian_student gs on gs.student_identity_id = stu.student_identity_id
+            and gs.is_valid = 1 and bind_status = 1
+        WHERE
+        c.is_valid = 1 and c.school_id = #{schoolId} and gs.guardian_user_id is not NULL
+        AND stu.term_id = #{termId}
+        AND c.id IN
+        <foreach item="classId" collection="noticeObjIdList" separator="," open="(" close=")">
+            #{classId}
+        </foreach>
+        <if test="studentIds != null and studentIds.size > 0">
+            AND stu.id IN
+            <foreach item="studentId" collection="studentIds" separator="," open="(" close=")">
+                #{studentId}
+            </foreach>
+        </if>
+    </select>
+
+</mapper>

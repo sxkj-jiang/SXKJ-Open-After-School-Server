@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.afterschool.mapper.EduclGradeMapper">
+
+    <select id="pageList" resultType="com.sxkj.edu.module.afterschool.domain.vo.EduclGradeVO">
+        SELECT
+            g.id,
+            g.school_id,
+            s.school_name,
+            g.grade_code,
+            g.school_stage,
+            g.grade_name,
+            g.director_user_id,
+            u.teacher_name AS directorName,
+            g.remark,
+            g.sort_no,
+            g.create_time,
+            g.update_time
+        FROM
+            t_educl_grade g
+            LEFT JOIN t_school_manage s ON s.id = g.school_id
+            LEFT JOIN t_as_teacher u ON u.id = g.director_user_id
+        <where>
+            g.is_valid = 1
+            <if test="query.schoolId != null">
+                AND g.school_id = #{query.schoolId}
+            </if>
+            <if test="query.gradeName != null and query.gradeName != ''">
+                AND g.grade_name LIKE concat('%', #{query.gradeName}, '%')
+            </if>
+            <if test="query.schoolStage != null">
+                AND g.school_stage = #{query.schoolStage}
+            </if>
+            <if test="query.directorUserId != null">
+                AND g.director_user_id = #{query.directorUserId}
+            </if>
+            <if test="query.createTimeStart != null and query.createTimeEnd != null">
+                AND g.create_time BETWEEN #{query.createTimeStart} AND #{query.createTimeEnd}
+            </if>
+        </where>
+        ORDER BY g.create_time DESC
+    </select>
+
+</mapper>

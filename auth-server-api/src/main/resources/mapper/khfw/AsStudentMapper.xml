@@ -1,0 +1,241 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.afterschool.mapper.AsStudentMapper">
+
+
+    <select id="selectStudentAuditSummary" resultType="java.util.Map">
+        SELECT
+            t2.register_status AS registerStatus,
+            COUNT(*) AS cnt
+        FROM t_as_student_identity t1
+        LEFT JOIN (
+            SELECT s.*
+            FROM t_as_student s
+            INNER JOIN (
+            SELECT s1.student_identity_id, MAX(s1.create_time) AS max_time
+            FROM t_as_student s1
+            GROUP BY s1.student_identity_id
+            ) t_max ON s.student_identity_id = t_max.student_identity_id
+            AND s.create_time = t_max.max_time
+        ) t2 ON t1.id = t2.student_identity_id
+        INNER JOIN t_educl_term te ON te.id = t2.term_id AND te.is_valid = 1
+        WHERE t1.is_valid = 1 AND t1.school_id = #{schoolId}
+        GROUP BY t2.register_status
+    </select>
+
+    <!-- 学生学习成果分页查询 -->
+    <select id="pageLearningAchievement" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsStudentLearningAchievementVO">
+        SELECT
+            svc.service_name AS serviceName,
+            cc.course_class_name AS courseClassName,
+            st.student_no AS studentNo,
+            st.student_name AS studentName,
+            cs.session_date,
+            date_format(cs.start_time, '%H:%i') AS startTime,
+            date_format(cs.end_time, '%H:%i') AS endTime,
+            st.term_id,
+            st.class_id AS classId,
+            st.grade_id AS gradeId,
+            cs.teacher_id AS teacherId,
+            cs.id AS sessionId,
+            t.teacher_name AS teacherName,
+            fb.id AS feedbackId,
+            fb.update_time AS checkInDate,
+            CASE WHEN fb.id IS NOT NULL THEN 1 ELSE 0 END AS isCheckIn
+        FROM t_as_course_session cs
+        INNER JOIN t_as_course_class cc ON cs.course_class_id = cc.id AND cc.is_valid = 1
+        INNER JOIN t_as_service svc ON cc.service_id = svc.id AND svc.is_valid = 1
+        INNER JOIN t_educl_term te ON te.id = svc.term_id AND te.is_valid = 1
+        INNER JOIN t_as_enrollment en ON en.course_class_id = cc.id AND en.is_valid = 1 AND en.enroll_status in (1,3)
+        INNER JOIN t_as_student st ON en.student_id = st.id AND st.is_valid = 1
+        LEFT JOIN t_as_teacher t ON cs.teacher_id = t.id AND t.is_valid = 1
+        LEFT JOIN t_as_course_stu_feedback fb ON fb.session_id = cs.id
+            AND fb.student_id = st.id
+            AND fb.is_valid = 1
+        <where>
+            cs.is_valid = 1
+            AND cs.session_status = 2
+            and st.register_status = 1
+            AND st.school_id = #{query.schoolId}
+            <if test="query.courseClassId != null and query.courseClassId != 0">
+                AND cc.id = #{query.courseClassId}
+            </if>
+            <if test="query.classId != null and query.classId != 0">
+                AND st.class_id = #{query.classId}
+            </if>
+            <if test="query.studentKeyword != null and query.studentKeyword != ''">
+                AND (st.student_name LIKE CONCAT('%', #{query.studentKeyword}, '%')
+                     OR st.student_no LIKE CONCAT('%', #{query.studentKeyword}, '%'))
+            </if>
+            <if test="query.sessionStartDate != null and query.sessionEndDate != null">
+                AND DATE(cs.session_date) BETWEEN DATE(#{query.sessionStartDate}) AND DATE(#{query.sessionEndDate})
+            </if>
+            <if test="query.teacherName != null">
+                AND t.teacher_name = #{query.teacherName}
+            </if>
+            <if test="query.termId != null and query.termId != 0">
+                AND svc.term_id = #{query.termId}
+            </if>
+        </where>
+        GROUP BY cs.id,st.id
+        ORDER BY cs.session_date DESC,cc.id desc, st.student_no ASC
+    </select>
+
+    <!-- 批量统计各学校校友数量（学籍状态为在籍） -->
+    <select id="countSchoolMateBySchoolIds" resultType="java.util.Map">
+        SELECT
+            school_id AS schoolId,
+            COUNT(*) AS cnt
+        FROM t_as_student
+        WHERE is_valid = 1
+          AND register_status = 1
+          AND school_roll_status = 1
+          AND school_id IN
+        <foreach collection="schoolIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        GROUP BY school_id
+    </select>
+    <select id="queryStudentByIds"
+            resultType="com.sxkj.edu.module.afterschool.domain.vo.TeacherNoticeStudentVO">
+        SELECT DISTINCT
+            stu.id AS studentId,
+            gs.guardian_user_id AS userId
+        FROM t_as_student stu
+            INNER JOIN t_as_guardian_student gs on gs.student_identity_id = stu.student_identity_id
+                and gs.is_valid = 1 and bind_status = 1
+        WHERE
+          stu.is_valid = 1 and stu.register_status = 1 and gs.guardian_user_id is not NULL
+          AND stu.school_id = #{schoolId}
+          AND stu.id IN
+        <foreach collection="noticeObjIdList" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+    <select id="querytBindParentByGradeOrClass"
+            resultType="com.sxkj.edu.domain.base.khfw.vo.AsStudentBindParentVO">
+        SELECT DISTINCT
+            stu.id AS studentId,
+            gs.id AS parentId,
+            gs.guardian_user_id AS parentUserId
+        FROM t_as_student stu
+        INNER JOIN t_as_guardian_student gs on gs.student_identity_id = stu.student_identity_id
+            and gs.is_valid = 1 and bind_status = 1
+        WHERE
+        stu.is_valid = 1 and stu.register_status = 1 and gs.guardian_user_id is not NULL
+        AND stu.school_id = #{query.schoolId}
+        <if test="query.termId != null">
+            AND stu.term_id = #{query.termId}
+        </if>
+        <if test="query.gradeIds != null and query.gradeIds.size > 0">
+            AND stu.grade_id in
+            <foreach collection="query.gradeIds" open="(" close=")" item="item" separator=",">
+                #{item}
+            </foreach>
+        </if>
+        <if test="query.classIds != null and query.classIds.size > 0">
+            AND stu.class_id in
+            <foreach collection="query.classIds" open="(" close=")" item="item" separator=",">
+                #{item}
+            </foreach>
+        </if>
+
+    </select>
+
+    <!-- 学生档案分页查询：按学期、学号、姓名和身份证分组，取每个学期快照的最新记录 -->
+    <select id="pageStudent" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsStudentVO">
+        SELECT
+            t2.id,
+            t2.student_identity_id AS studentIdentityId,
+            t1.school_id AS schoolId,
+            t1.student_name AS studentName,
+            t1.student_no AS studentNo,
+            t1.id_card AS idCard,
+            t1.gender,
+            t1.enrollment_year,
+            t2.term_id AS termId,
+            t2.grade_id AS gradeId,
+            t2.class_id AS classId,
+            t2.school_roll_status AS schoolRollStatus,
+            t2.register_status AS registerStatus,
+            t1.avatar_file_id AS avatarFileId,
+            t2.update_time AS updateTime,
+            te.term_name AS termName,
+            t2.graduation_year AS graduationYear
+        FROM t_as_student_identity t1
+        LEFT JOIN (
+            SELECT s.*
+            FROM t_as_student s
+            INNER JOIN (
+            SELECT s1.student_identity_id, MAX(s1.create_time) AS max_time
+            FROM t_as_student s1
+            GROUP BY s1.student_identity_id
+            ) t_max ON s.student_identity_id = t_max.student_identity_id
+            AND s.create_time = t_max.max_time
+        ) t2 ON t1.id = t2.student_identity_id
+        INNER JOIN t_educl_term te ON te.id = t2.term_id AND te.is_valid = 1
+        WHERE t1.is_valid = 1
+        <if test="query.schoolId != null">
+            AND t1.school_id = #{query.schoolId}
+        </if>
+        <if test="query.studentName != null and query.studentName != ''">
+            AND t1.student_name LIKE CONCAT('%', #{query.studentName}, '%')
+        </if>
+        <if test="query.studentNo != null and query.studentNo != ''">
+            AND t1.student_no LIKE CONCAT('%', #{query.studentNo}, '%')
+        </if>
+        <if test="query.gradeId != null">
+            AND t2.grade_id = #{query.gradeId}
+        </if>
+        <if test="query.classId != null">
+            AND t2.class_id = #{query.classId}
+        </if>
+        <if test="query.termId != null">
+            AND (t2.term_id = #{query.termId} OR t2.school_roll_status = 2)
+        </if>
+        <if test="query.schoolRollStatus != null">
+            AND t2.school_roll_status = #{query.schoolRollStatus}
+        </if>
+        <if test="query.registerStatus != null">
+            AND t2.register_status = #{query.registerStatus}
+        </if>
+        ORDER BY t2.class_id desc, t1.student_no ASC
+    </select>
+
+
+
+    <!--
+        邀请选课可选学生分页查询-公共范围过滤条件片段。
+        通过 scopeClassIds/scopeGradeIds 做范围过滤，
+        JOIN 年级表与班级表获取名称，避免 Service 层逐条查询。
+    -->
+    <sql id="inviteScopeStudentConditions">
+        SELECT s.*, g.grade_name AS gradeName, c.class_name AS className
+        FROM t_as_student s
+        INNER JOIN t_educl_grade g ON s.grade_id = g.id AND g.is_valid = 1
+        INNER JOIN t_educl_class c ON s.class_id = c.id AND c.is_valid = 1
+        WHERE  s.school_id = #{schoolId}
+        AND s.term_id = #{termId}
+        AND s.register_status = 1
+        and s.is_valid = 1
+        <if test="scopeClassIds != null and scopeClassIds.size() > 0">
+            AND s.class_id IN
+            <foreach collection="scopeClassIds" item="cid" open="(" separator="," close=")">
+                #{cid}
+            </foreach>
+        </if>
+        <if test="scopeGradeIds != null and scopeGradeIds.size() > 0">
+            AND s.grade_id IN
+            <foreach collection="scopeGradeIds" item="gid" open="(" separator="," close=")">
+                #{gid}
+            </foreach>
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (s.student_no LIKE CONCAT('%', #{keyword}, '%')
+            OR s.student_name LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        <if test="gradeId != null">AND s.grade_id = #{gradeId}</if>
+        <if test="classId != null">AND s.class_id = #{classId}</if>
+    </sql>
+
+</mapper>

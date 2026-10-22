@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.mapper.base.TPortalArticleManageMapper">
+
+
+    <select id="queryArticleManagePage" resultType="com.sxkj.edu.domain.mult.vo.TPortalArticleManageVO">
+        SELECT
+            m.id,
+            t.article_type_name,
+            m.sort,
+            m.news_name,
+            m.introduction,
+            m.is_outside,
+            m.link_url,
+            m.is_show,
+            m.create_time
+        FROM
+            t_portal_article_manage m
+        LEFT JOIN t_portal_article_type t on t.id = m.article_type_id
+        where m.is_valid = 1 and t.is_valid = 1
+        <if test="query.newsName != null and query.newsName != ''">
+            and m.news_name like concat('%',#{query.newsName},'%')
+        </if>
+        <if test="query.articleTypeId != null and query.articleTypeId != 0">
+            and m.article_type_id = #{query.articleTypeId}
+        </if>
+        <if test="query.createTimeStart != null and query.createTimeEnd != null">
+            and m.create_time between #{query.createTimeStart} and #{query.createTimeEnd}
+        </if>
+        <if test="query.schoolId != null and query.schoolId != 0">
+            and m.school_id = #{query.schoolId}
+        </if>
+        order by m.sort asc
+    </select>
+
+    <select id="articleManageeMobileMore" resultType="com.sxkj.edu.domain.mult.vo.TPortalArticleManageVO">
+        SELECT
+            m.id,
+            m.news_name,
+            m.sort,
+            t.article_type_name,
+            m.introduction,
+            m.create_time,
+            m.is_show,
+            m.photo_url,
+            m.is_outside,
+            m.link_url
+        FROM
+            t_portal_article_manage m
+            LEFT JOIN t_portal_article_type t ON t.id = m.article_type_id
+        WHERE
+            m.article_type_id = #{query.id}
+          AND m.is_show = 1
+          AND m.is_valid = 1
+          AND t.is_valid = 1
+          AND t.is_enable = 1
+        <if test="query.schoolId != null and query.schoolId != 0">
+            and m.school_id = #{query.schoolId}
+        </if>
+        order by m.sort,m.create_time desc
+    </select>
+</mapper>

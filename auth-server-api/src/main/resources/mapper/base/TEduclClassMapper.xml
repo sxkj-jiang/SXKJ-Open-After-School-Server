@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.mapper.base.TEduclClassMapper">
+
+    <!-- 通过学期与班主任教师id查询班级信息与班级人数 -->
+    <select id="listHeadTeacherClassWithStudentCount"
+            resultType="com.sxkj.edu.module.afterschool.domain.vo.AsTeacherStudentDestinationClassVO">
+        SELECT
+            c.id AS classId,
+            IFNULL(CONCAT(g.grade_name, c.class_name), c.class_name) AS className,
+            IFNULL(sc.classStudentCount, 0) AS classStudentCount
+        FROM t_educl_class c
+        LEFT JOIN t_educl_grade g ON g.id = c.grade_id AND g.is_valid = 1
+        LEFT JOIN (
+            SELECT class_id, COUNT(*) AS classStudentCount
+            FROM t_as_student
+            WHERE is_valid = 1
+              AND school_id = #{schoolId}
+              AND register_status = 1
+              AND term_id = #{termId}
+            GROUP BY class_id
+        ) sc ON sc.class_id = c.id
+        WHERE c.is_valid = 1
+          AND c.head_teacher_id = #{headTeacherId}
+          AND c.school_id = #{schoolId}
+          AND c.term_id = #{termId}
+        <if test="classId != null and classId != 0">
+            AND c.id = #{classId}
+        </if>
+    </select>
+
+</mapper>

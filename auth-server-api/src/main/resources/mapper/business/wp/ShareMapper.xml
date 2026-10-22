@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.sxkj.edu.module.mapper.wp.ShareMapper">
+
+    <select id="selectSharePage" resultType="com.sxkj.edu.domain.vo.wp.ShareListVO">
+        SELECT c.id,
+        c.user_id userId,
+        u.actual_name userName,
+        c.file_md5 fileMd5,
+        c.file_name fileName,
+        c.file_url fileUrl,
+        c.is_dir isDir,
+        c.is_valid isValid,
+        a.share_status shareStatus,
+        a.share_batch_num shareBatchNum,
+        a.share_type shareType,
+        a.extraction_code extractionCode,
+        c.file_size fileSize,
+        c.file_path filePath,
+        c.extend_name extendName,
+        a.share_time shareTime,
+        c.delete_time deleteTime,
+        a.end_time endTime,
+        c.delete_batch_num deleteBatchNum
+        FROM t_wp_share a
+        LEFT JOIN t_wp_share_file b ON b.share_batch_num = a.share_batch_num
+        LEFT JOIN t_wp_user_file c ON c.id = b.file_id
+        LEFT JOIN t_base_user u ON b.user_id = u.id
+        WHERE a.is_valid =1 and u.is_valid =1
+        and c.is_valid =1
+        <if test="query.fileLabelId != null and query.fileLabelId.size > 0">
+            AND EXISTS (
+            select 1 from t_wp_user_file_label ufl
+            where ufl.file_id = c.id and ufl.is_valid = 1
+            AND ufl.label_id IN
+            <foreach collection="query.fileLabelId" open="(" close= ")" item="item" separator=","  >
+                #{item}
+            </foreach>
+            )
+        </if>
+        <if test="query.startTime != null and query.endTime != null">
+            and c.create_time &gt;= #{query.startTime}
+            and c.create_time &lt;= #{query.endTime}
+        </if>
+        <if test="query.userId != null and query.userId !=0">
+            and c.user_id = #{query.userId}
+        </if>
+        <if test="query.keyword != null and query.keyword != ''">
+            <bind name="likeName" value=" '%' + query.keyword +'%' "></bind>
+            AND (u.actual_name like #{likeName} or c.file_name like #{likeName})
+        </if>
+        order BY a.share_time desc
+    </select>
+
+</mapper>

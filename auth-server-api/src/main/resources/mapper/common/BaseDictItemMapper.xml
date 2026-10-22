@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.mapper.sys.BaseDictItemMapper">
+
+    <select id="queryBaseDictParentByList" resultType="com.sxkj.edu.domain.base.DictItemVo">
+        SELECT
+        c.id,
+        c.parent_id parentId,
+        c.type_code typeCode,
+        c.type_value typeValue,
+        c.type_name typeName
+        FROM
+        t_base_dict_item c
+        WHERE
+        c.STATUS = 1
+        AND c.is_valid = 1
+        AND EXISTS (
+        SELECT
+        f.id
+        FROM
+        t_base_dict_item f
+        WHERE
+        f.STATUS = 1
+        AND f.is_valid = 1
+        AND f.id = c.parent_id
+        <if test="query.parentCodeList != null and query.parentCodeList.size > 0">
+            AND f.type_code in
+            <foreach collection="query.parentCodeList" open="(" close=")" item="item" separator=",">
+                #{item}
+            </foreach>
+        </if>
+        )
+        ORDER BY
+        c.sort DESC
+    </select>
+
+    <select id="queryBaseDictParentByCode" resultType="com.sxkj.edu.domain.base.DictItemVo">
+        SELECT
+            c.id,
+            c.parent_id parentId,
+            c.type_code typeCode,
+            c.type_value typeValue,
+            c.type_name typeName
+        FROM
+            t_base_dict_item c
+        WHERE
+            c.STATUS = 1
+          AND c.is_valid = 1
+          AND EXISTS (
+                SELECT
+                    f.id
+                FROM
+                    t_base_dict_item f
+                WHERE
+                    f.STATUS = 1
+                  AND f.is_valid = 1
+                  AND f.type_code = #{typeCode}
+                  AND f.id = c.parent_id
+            )
+        ORDER BY
+            c.sort DESC
+    </select>
+
+
+
+</mapper>

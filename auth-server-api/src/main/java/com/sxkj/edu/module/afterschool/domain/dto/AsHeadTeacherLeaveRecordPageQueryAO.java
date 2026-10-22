@@ -1,0 +1,51 @@
+package com.sxkj.edu.module.afterschool.domain.dto;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.sxkj.edu.common.page.PageQuery;
+import io.swagger.annotations.ApiModel;
+import io.swagger.annotations.ApiModelProperty;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+
+import javax.validation.constraints.NotNull;
+import java.io.Serializable;
+import java.util.Date;
+
+/**
+ * 班主任查询班级学生请假记录分页查询请求参数
+ *
+ * @author system
+ * @date 2026-06-05
+ */
+@Data
+@EqualsAndHashCode(callSuper = true)
+@ApiModel("班主任查询班级学生请假记录分页查询请求参数")
+public class AsHeadTeacherLeaveRecordPageQueryAO extends PageQuery implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
+    @NotNull(message = "学校ID不能为空")
+    @ApiModelProperty(value = "学校ID", required = true)
+    private Long schoolId;
+
+    @NotNull(message = "班主任教师ID不能为空")
+    @ApiModelProperty(value = "班主任教师ID", required = true)
+    private Long headTeacherId;
+
+    @ApiModelProperty("请假开始日期 yyyy-MM-dd HH:mm")
+    @JsonFormat(timezone = "GMT+8", pattern = "yyyy-MM-dd HH:mm")
+    private Date leaveStartDate;
+
+    @ApiModelProperty("请假结束日期 yyyy-MM-dd HH:mm")
+    @JsonFormat(timezone = "GMT+8", pattern = "yyyy-MM-dd HH:mm")
+    private Date leaveEndDate;
+
+    @ApiModelProperty(value = "请假类型：1病假 2事假 3其他")
+    private Integer leaveType;
+
+    @ApiModelProperty(value = "学生姓名（模糊查询）")
+    private String studentName;
+
+    @ApiModelProperty("学期ID，未传时默认使用学校默认学期")
+    private Long termId;
+}

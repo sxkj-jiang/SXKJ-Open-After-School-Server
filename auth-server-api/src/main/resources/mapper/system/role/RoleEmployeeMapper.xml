@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.system.role.roleemployee.RoleUserDao">
+
+
+    <resultMap id="EmployeeDTO"
+               type="com.sxkj.edu.module.system.employee.domain.dto.EmployeeDTO"></resultMap>
+
+
+    <sql id="baseSql">
+        er.id,
+        er.role_id,
+        er.user_id,
+        er.is_valid,
+        er.update_time,
+        er.create_time
+    </sql>
+    <sql id="common_isValid">
+        and r.is_valid=1
+    </sql>
+
+    <select id="checkUserIsAdmin" resultType="int">
+        SELECT count(1)
+        FROM t_base_user t,
+             t_role_user e,
+             t_role r
+        WHERE t.id = e.user_id
+          AND e.role_id = r.id
+          AND t.id = #{userId}
+          AND r.id = 1
+          AND t.is_valid = 1
+          AND t.status = 1
+    </select>
+
+    <select id="checkUserIsAdminByLoginName" resultType="java.lang.String">
+        SELECT r.code
+        FROM t_base_user t,
+        t_role_user e,
+        t_role r
+        WHERE t.id = e.user_id
+        AND e.role_id = r.id
+        <if test="type == 1">
+            AND t.login_name = #{loginName}
+        </if>
+        <if test="type == 2">
+            AND t.phone = #{loginName}
+        </if>
+        AND t.is_valid = 1
+        and r.is_school = 1
+        AND t.status = 1
+    </select>
+
+    <!-- 根据角色和用户查询用户角色是否已存在 -->
+    <select id="checkRoleByLoginNameAndRoleCode" resultType="java.lang.String">
+        SELECT
+            distinct r.CODE
+        FROM
+            t_base_user t,
+            t_role_user e,
+            t_role r
+        WHERE
+            t.id = e.user_id
+          AND e.role_id = r.id
+          AND t.is_valid = 1
+          and r.is_valid =1
+          and t.id = #{userId}
+          <if test="schoolId != null">
+              AND t.school_id = #{schoolId}
+          </if>
+        <if test="roleCode != null">
+            AND r.`code` = #{roleCode}
+        </if>
+    </select>
+
+    <select id="selectRoleIdByEmployeeId" resultType="java.lang.Long">
+        SELECT distinct er.role_id
+        FROM t_role_user er
+        WHERE er.is_valid = 1
+          and er.user_id = #{userId}
+    </select>
+
+
+    <select id="selectEmployeeByNamePage" resultMap="EmployeeDTO">
+        SELECT
+        e.id,
+        e.login_name,
+        e.login_pwd,
+        e.actual_name,
+        e.nick_name,
+        e.phone,
+        e.id_card,
+        e.birthday,
+        e.email,
+        e.department_id,
+        e.is_leave,
+        e.status,
+        e.user_type,
+        e.update_time,
+        e.create_time
+        FROM
+        t_role_user er
+        left join t_base_user e on er.user_id = e.id
+        left join t_role r on er.role_id = r.id
+        where er.is_valid =1 and e.is_valid =1 and r.is_valid =1
+        and e.approve_status=1 and e.status = 1
+        <if test="queryDTO.roleName != null and queryDTO.roleName != ''">
+            <bind name="likeRoleName" value=" '%' + queryDTO.roleName +'%' "></bind>
+            AND r.role_name like #{likeRoleName}
+        </if>
+        <if test="queryDTO.roleId != null and queryDTO.roleId != 0">
+            AND er.role_id = #{queryDTO.roleId}
+        </if>
+        <if test="queryDTO.queryCriteria != null and queryDTO.queryCriteria != ''">
+            <bind name="likeQueryCriteria" value=" '%' + queryDTO.queryCriteria +'%' "></bind>
+            AND (e.actual_name like #{likeQueryCriteria} OR e.phone like #{likeQueryCriteria} OR e.login_name like
+            #{likeQueryCriteria})
+        </if>
+        and e.id is not null
+        order by e.id desc
+    </select>
+
+    <select id="selectEmployeeByRoleId" resultMap="EmployeeDTO">
+        SELECT e.id,
+               e.login_name,
+               e.login_pwd,
+               e.actual_name,
+               e.nick_name,
+               e.phone,
+               e.id_card,
+               e.birthday,
+               e.email,
+               e.status,
+               e.department_id,
+               e.is_leave,
+               e.remark,
+               e.update_time,
+               e.create_time
+        FROM t_role_user er
+        left join t_base_user e on er.user_id = e.id
+        WHERE er.is_valid = 1
+          and e.is_valid = 1
+          and e.id is not null
+          and e.approve_status = 1
+          and er.role_id = #{roleId}
+    </select>
+
+    <select id="selectEmployeeByRoleIdOnPrivileges" resultMap="EmployeeDTO">
+        SELECT e.id,
+               e.login_name,
+               e.login_pwd,
+               e.actual_name,
+               e.nick_name,
+               e.phone,
+               e.id_card,
+               e.birthday,
+               e.email,
+               e.status,
+               e.department_id,
+               e.is_leave,
+               e.update_time,
+               e.create_time
+        FROM t_role_user er
+                 left join t_base_user e on er.user_id = e.id
+        WHERE er.is_valid = 1
+          and e.is_valid = 1
+          and e.id is not null
+          and e.approve_status = 1
+          and er.role_id = #{roleId}
+    </select>
+
+
+    <select id="countByRoleName" resultType="int">
+        SELECT COUNT(*)
+        FROM t_role r
+                 LEFT JOIN t_role_user b ON r.id = b.role_id
+        WHERE r.is_valid = 1
+          and b.is_valid = 1
+          and r.role_name = #{roleName}
+    </select>
+
+    <select id="queryAllUserRoleList" resultType="com.sxkj.edu.module.system.role.roleemployee.domain.RoleUserDataDTO">
+        SELECT distinct t.user_id   userId,
+                        t.role_id   roleId,
+                        c.role_name roleName
+        FROM t_role c,
+             t_role_user t
+        WHERE c.id = t.role_id
+          AND c.is_valid = 1
+          AND t.is_valid = 1
+        order by userId asc
+    </select>
+
+</mapper>

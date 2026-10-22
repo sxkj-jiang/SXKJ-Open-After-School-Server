@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.afterschool.mapper.AsSubjectMapper">
+
+    <select id="pageList" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsSubjectVO">
+        SELECT
+            s.id,
+            s.subject_code,
+            s.subject_name,
+            s.subject_desc,
+            s.grade_id,
+            g.grade_name,
+            s.school_id,
+            s.enabled,
+            s.create_time,
+            u.actual_name AS createUser
+        FROM t_as_subject s
+        LEFT JOIN t_educl_grade g ON s.grade_id = g.id
+        LEFT JOIN t_base_user u ON s.create_user = u.id
+        <where>
+            s.is_valid = 1
+            <if test="query.schoolId != null">
+                AND s.school_id = #{query.schoolId}
+            </if>
+            <if test="query.gradeId != null">
+                AND s.grade_id = #{query.gradeId}
+            </if>
+            <if test="query.subjectName != null and query.subjectName != ''">
+                AND s.subject_name LIKE concat('%', #{query.subjectName}, '%')
+            </if>
+            <if test="query.subjectCode != null and query.subjectCode != ''">
+                AND s.subject_code = #{query.subjectCode}
+            </if>
+            <if test="query.enabled != null">
+                AND s.enabled = #{query.enabled}
+            </if>
+        </where>
+        ORDER BY s.create_time desc
+    </select>
+
+    <select id="listEnabledGroupByGrade" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsSubjectVO">
+        SELECT
+            s.id,
+            s.subject_code,
+            s.subject_name,
+            s.grade_id,
+            g.grade_name,
+            g.sort_no AS gradeSortNo
+        FROM t_as_subject s
+        INNER JOIN t_educl_grade g ON s.grade_id = g.id AND g.is_valid = 1
+        WHERE s.is_valid = 1
+          AND s.enabled = 1
+          AND s.school_id = #{schoolId}
+        ORDER BY g.sort_no ASC, g.id ASC, s.subject_code ASC
+    </select>
+
+</mapper>

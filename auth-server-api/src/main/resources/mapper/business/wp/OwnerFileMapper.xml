@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.sxkj.edu.module.business.dao.WpOwnerFileDao">
+
+    <!-- 分页查询教师课程资源（高性能：驱动表为 owner_file，索引过滤后小表驱动大表） -->
+    <select id="pageTeacherCourseResource" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsTeacherResourcePageVO">
+        SELECT
+            of.resource_id   AS resourceId,
+            of.session_id    AS sessionId,
+            r.resource_name  AS resourceName,
+            r.resource_intr  AS resourceIntr,
+            of.create_time   AS uploadDate,
+            uf.file_url      AS coverFileUrl
+        FROM t_wp_owner_file of
+        INNER JOIN t_as_resource r
+            ON of.resource_id = r.id
+           AND r.is_valid = 1
+        INNER JOIN t_as_course_session cs
+            ON of.session_id = cs.id
+           AND cs.is_valid = 1
+        INNER JOIN t_as_course_class cc
+            ON cs.course_class_id = cc.id
+           AND cc.is_valid = 1
+        LEFT JOIN t_base_file uf
+            ON r.cover_file_id = uf.id
+           AND uf.is_valid = 1
+        <where>
+            of.is_valid = 1
+            AND of.school_id = #{query.schoolId}
+            AND of.user_id = #{userId}
+            AND of.resource_id IS NOT NULL
+            AND cc.category_id = #{query.categoryId}
+            <if test="query.resourceName != null and query.resourceName != ''">
+                <bind name="likeResourceName" value="'%' + query.resourceName + '%'"/>
+                AND r.resource_name LIKE #{likeResourceName}
+            </if>
+        </where>
+        ORDER BY of.create_time DESC
+    </select>
+
+</mapper>

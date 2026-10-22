@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.sxkj.edu.module.mapper.wp.ShareFileMapper">
+
+    <select id="selectShareFileList" resultType="com.sxkj.edu.domain.vo.wp.ShareFileListVO">
+        SELECT c.id,
+               c.user_id userId,
+               u.actual_name userName,
+               c.file_md5 fileMd5,
+               c.file_name fileName,
+               c.file_url fileUrl,
+               c.is_dir isDir,
+               c.is_valid isValid,
+               a.share_status shareStatus,
+               a.share_batch_num shareBatchNum,
+               a.share_type shareType,
+               a.extraction_code extractionCode,
+               c.file_size fileSize,
+               c.file_path filePath,
+               c.extend_name extendName,
+               a.share_time shareTime,
+               c.delete_time deleteTime,
+               a.end_time endTime,
+               c.delete_batch_num deleteBatchNum
+        FROM t_wp_share a
+                 LEFT JOIN t_wp_share_file b ON b.share_batch_num = a.share_batch_num
+                 LEFT JOIN t_wp_user_file c ON c.id = b.file_id
+                 LEFT JOIN t_base_user u ON c.user_id = u.id
+        WHERE a.is_valid =1 and u.is_valid =1
+        and a.share_batch_num = #{shareBatchNum}
+        and b.share_file_path = #{shareFilePath}
+    </select>
+
+    <select id="countShareFileNum" resultType="java.lang.Integer">
+        SELECT count(1) count
+        from t_wp_share_file b
+        left join t_wp_user_file c on b.file_id = c.id
+        where b.is_valid = 1 and c.is_valid =1
+          and c.user_id = #{query.userId}
+            <if test="query.fileMd5 != null and query.fileMd5 !=''">
+                and c.file_md5 = #{query.fileMd5}
+            </if>
+            <if test="query.filePath != null and query.filePath !=''">
+                and c.file_path = #{query.filePath}
+            </if>
+    </select>
+
+</mapper>

@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.afterschool.mapper.AsCourseGradeQuotaMapper">
+    <!-- 与原子计数更新使用同一课程行；跨班调课先按ID升序取得这些行锁。 -->
+    <update id="lockCourse">
+        UPDATE t_as_course_class SET enrolled_count = enrolled_count WHERE id = #{courseId}
+    </update>
+    <!-- 仅保存配置使用当前读，不能用外层事务可能已建立的旧快照覆盖人数。 -->
+    <select id="currentCourse" resultType="com.sxkj.edu.module.afterschool.domain.entity.AsCourseClassEntity">
+        SELECT * FROM t_as_course_class WHERE id = #{courseId} FOR UPDATE
+    </select>
+    <select id="listCurrent" resultType="com.sxkj.edu.module.afterschool.domain.entity.AsCourseGradeQuotaEntity">
+        SELECT * FROM t_as_course_grade_quota WHERE course_class_id = #{courseId} ORDER BY grade_id FOR UPDATE
+    </select>
+    <select id="hasLegacyEnrollment" resultType="int">
+        SELECT EXISTS(SELECT 1 FROM t_as_enrollment
+            WHERE course_class_id = #{courseId} AND session_id IS NOT NULL AND is_valid = 1
+              AND enroll_status IN (0, 1, 3) LIMIT 1)
+    </select>
+    <update id="changeTotalCapacity">
+        UPDATE t_as_course_class SET capacity = #{capacity}
+        WHERE id = #{courseId} AND is_valid = 1 AND enroll_type = 1
+          AND IFNULL(enrolled_count, 0) &lt;= #{capacity}
+    </update>
+    <update id="reserveTotal">
+        UPDATE t_as_course_class c SET c.enrolled_count = IFNULL(c.enrolled_count, 0) + 1
+        WHERE c.id = #{courseId} AND c.is_valid = 1 AND c.enroll_type = 1
+          AND c.class_status NOT IN (3, 4) AND c.capacity &gt; 0
+          AND IFNULL(c.enrolled_count, 0) &lt; c.capacity
+          AND EXISTS (SELECT 1 FROM t_as_course_grade_quota q
+              WHERE q.course_class_id = c.id AND q.grade_id = #{gradeId} AND q.is_valid = 1)
+    </update>
+    <update id="reserveGrade">
+        UPDATE t_as_course_grade_quota SET enrolled_count = enrolled_count + 1, update_time = NOW()
+        WHERE course_class_id = #{courseId} AND grade_id = #{gradeId} AND is_valid = 1
+          AND capacity &gt; 0 AND enrolled_count &lt; capacity
+    </update>
+    <!-- 仅学生调课审核调用，普通报名继续使用上面的限额条件更新。 -->
+    <update id="reserveTotalForStudentAdjust">
+        UPDATE t_as_course_class c SET c.enrolled_count = IFNULL(c.enrolled_count, 0) + 1
+        WHERE c.id = #{courseId} AND c.is_valid = 1 AND c.enroll_type = 1
+          AND c.class_status NOT IN (3, 4) AND c.capacity &gt; 0
+          AND EXISTS (SELECT 1 FROM t_as_course_grade_quota q
+              WHERE q.course_class_id = c.id AND q.grade_id = #{gradeId} AND q.is_valid = 1 AND q.capacity &gt; 0)
+    </update>
+    <update id="reserveGradeForStudentAdjust">
+        UPDATE t_as_course_grade_quota SET enrolled_count = enrolled_count + 1, update_time = NOW()
+        WHERE course_class_id = #{courseId} AND grade_id = #{gradeId} AND is_valid = 1 AND capacity &gt; 0
+    </update>
+    <!-- 只为有调课审批快照且仍在班的学生提供凭证，不放宽其它超额数据的保存校验。 -->
+    <select id="hasApprovedStudentAdjust" resultType="int">
+        SELECT EXISTS(SELECT 1 FROM t_as_student_adjust_request r
+            WHERE r.school_id = #{schoolId} AND r.to_course_class_id = #{courseId}
+              AND r.is_valid = 1 AND r.request_status = 1 AND r.destination_type = 1
+              AND JSON_UNQUOTE(JSON_EXTRACT(r.to_course_snapshot_json, '$.capacityPolicy')) = 'STUDENT_ADJUST'
+              AND EXISTS (SELECT 1 FROM t_as_enrollment e
+                  WHERE e.school_id = r.school_id AND e.course_class_id = r.to_course_class_id
+                    AND e.student_id = r.student_id AND e.is_valid = 1
+                    AND e.session_id IS NOT NULL AND e.enroll_status IN (0, 1, 3))
+              <if test="gradeId != null">
+                  AND EXISTS (SELECT 1 FROM t_as_course_quota_member m
+                      WHERE m.course_class_id = r.to_course_class_id AND m.student_id = r.student_id
+                        AND m.grade_id = #{gradeId} AND m.occupied = 1)
+              </if>
+            LIMIT 1)
+    </select>
+    <insert id="createMember">
+        INSERT INTO t_as_course_quota_member(course_class_id, student_id, occupied)
+        VALUES(#{courseId}, #{studentId}, 0)
+        ON DUPLICATE KEY UPDATE id = id
+    </insert>
+    <update id="activateMember">
+        UPDATE t_as_course_quota_member SET occupied = 1, grade_id = #{gradeId}, term_id = #{termId}, update_time = NOW()
+        WHERE course_class_id = #{courseId} AND student_id = #{studentId} AND occupied = 0
+    </update>
+    <update id="beginRelease">
+        UPDATE t_as_course_quota_member SET occupied = 2, update_time = NOW()
+        WHERE course_class_id = #{courseId} AND student_id = #{studentId} AND occupied = 1
+    </update>
+    <update id="releaseGrade">
+        UPDATE t_as_course_grade_quota q
+        JOIN t_as_course_quota_member m ON m.course_class_id = q.course_class_id AND m.grade_id = q.grade_id
+        SET q.enrolled_count = q.enrolled_count - 1, q.update_time = NOW()
+        WHERE m.course_class_id = #{courseId} AND m.student_id = #{studentId} AND m.occupied = 2
+          AND q.is_valid = 1 AND q.enrolled_count &gt; 0
+    </update>
+    <update id="releaseTotal">
+        UPDATE t_as_course_class SET enrolled_count = enrolled_count - 1
+        WHERE id = #{courseId} AND enrolled_count &gt; 0
+    </update>
+    <update id="finishRelease">
+        UPDATE t_as_course_quota_member SET occupied = 0, update_time = NOW()
+        WHERE course_class_id = #{courseId} AND student_id = #{studentId} AND occupied = 2
+    </update>
+    <select id="hasQuota" resultType="int">
+        SELECT EXISTS(SELECT 1 FROM t_as_course_grade_quota WHERE course_class_id = #{courseId} AND is_valid = 1)
+    </select>
+    <select id="hasMember" resultType="int">
+        SELECT EXISTS(SELECT 1 FROM t_as_course_quota_member WHERE course_class_id = #{courseId} AND student_id = #{studentId})
+    </select>
+</mapper>

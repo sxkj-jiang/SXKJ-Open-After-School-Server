@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.afterschool.mapper.AsGuardianStudentMapper">
+
+    <select id="getStuParentDetail"
+            resultType="com.sxkj.edu.module.system.login.domain.LoginStuParentDetailVO">
+        SELECT
+            s.id studentId,
+            s.student_no,
+            s.student_name,
+            s.term_id,
+            s.student_identity_id
+        FROM
+            t_as_guardian_student g
+                INNER JOIN t_as_student s ON g.student_identity_id = s.student_identity_id
+        WHERE
+            s.school_id = #{schoolId}
+          AND s.term_id = #{termId}
+          AND s.is_valid = 1
+          AND g.is_valid = 1
+          AND g.bind_status = 1
+          AND g.guardian_user_id = #{parentId}
+        ORDER BY s.grade_id desc,s.id desc
+        limit 1
+    </select>
+
+    <!-- 返回家长的多个学生 -->
+    <select id="getStuListParentData"
+            resultType="com.sxkj.edu.module.system.login.domain.LoginStuParentDetailVO">
+        SELECT
+            s.id studentId,
+            s.student_no,
+            s.student_name,
+            s.term_id,
+            s.student_identity_id
+        FROM
+            t_as_guardian_student g
+                INNER JOIN t_as_student s ON g.student_identity_id = s.student_identity_id
+        WHERE
+            s.school_id = #{schoolId}
+          AND s.term_id = #{termId}
+          AND s.is_valid = 1
+          AND g.is_valid = 1
+          AND g.bind_status = 1
+          AND g.guardian_user_id = #{parentId}
+        ORDER BY s.grade_id desc,s.id desc
+    </select>
+
+    <select id="getStuTermListParentDetail"
+            resultType="com.sxkj.edu.module.system.login.domain.LoginStuParentDetailVO">
+        SELECT
+            s.id studentId,
+            s.student_no,
+            s.student_name,
+            s.term_id,
+            s.student_identity_id
+        FROM
+            t_as_guardian_student g
+                INNER JOIN t_as_student s ON g.student_identity_id = s.student_identity_id
+        WHERE
+            s.school_id = #{schoolId}
+            <if test="termId != null and termId != 0">
+                AND s.term_id = #{termId}
+            </if>
+          AND s.is_valid = 1
+          AND g.is_valid = 1
+          AND g.bind_status = 1
+          AND g.guardian_user_id = #{parentId}
+        ORDER BY s.create_time desc
+    </select>
+
+    <select id="getStuParentDetailByStudentId"
+            resultType="com.sxkj.edu.module.system.login.domain.LoginStuParentDataVO">
+        SELECT
+            s.id studentId,
+            s.student_no,
+            s.student_name,
+            g.id guardianId,
+            g.parent_name,
+            g.guardian_user_id parentId,
+            g.relation_name,
+            g.phone
+        FROM
+            t_as_guardian_student g
+                INNER JOIN t_as_student s ON g.student_identity_id = s.student_identity_id
+        WHERE
+            s.school_id = #{schoolId}
+          AND s.is_valid = 1
+          AND g.is_valid = 1
+          AND g.bind_status = 1
+          AND s.id = #{studentId}
+          order by g.create_time desc
+    </select>
+
+    <select id="queryPassStudentIdByParentUserId"
+            resultType="java.lang.Long">
+        SELECT
+            distinct b.id
+        FROM
+            t_as_guardian_student a,
+            t_as_student b
+        WHERE
+            a.student_identity_id = b.student_identity_id
+          AND b.register_status = 1
+          AND a.guardian_user_id = #{parentId}
+          AND a.school_id = #{schoolId}
+            <if test="termId != null and termId != 0">
+                AND b.term_id = #{termId}
+            </if>
+            <if test="studentIdentityId != null and studentIdentityId != 0">
+                AND b.student_identity_id = #{studentIdentityId}
+            </if>
+          AND a.bind_status = 1
+          and a.is_valid = 1
+          and b.is_valid =1
+          order by b.grade_id desc,b.id desc
+    </select>
+    <select id="queryBindParentStuByStuIds" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsStudentVO">
+        SELECT distinct
+            s.*
+        FROM
+            t_as_student s
+        INNER JOIN t_as_guardian_student g ON s.student_identity_id = g.student_identity_id
+            AND g.is_valid = 1 AND g.guardian_user_id is not null AND g.bind_status = 1
+        WHERE
+            s.is_valid = 1 AND s.school_id = #{schoolId} AND s.register_status = 1 AND s.id IN
+            <foreach item="stuId" collection="studentIds" separator="," open="(" close=")">
+                #{stuId}
+            </foreach>
+    </select>
+
+    <select id="queryBindParentTaskByStuParentIds" resultType="com.sxkj.edu.module.system.login.domain.LoginStuParentTaskVO">
+        SELECT DISTINCT
+        s.id studentId,
+        s.student_name,
+        s.student_no,
+        g.guardian_user_id guardianUserId,
+        g.parent_name,
+        g.phone,
+        n.grade_name,
+        c.class_name
+        FROM
+        t_as_student s
+        INNER JOIN t_as_guardian_student g ON s.student_identity_id = g.student_identity_id
+        AND g.is_valid = 1
+        AND g.guardian_user_id IS NOT NULL
+        AND g.bind_status = 1
+        INNER JOIN t_educl_grade n ON n.id = s.grade_id
+        INNER JOIN t_educl_class c ON c.id = s.class_id
+        WHERE
+        s.is_valid = 1
+        AND s.school_id = #{schoolId}
+        AND s.term_id = #{termId}
+        AND s.register_status = 1
+        and c.is_valid =1
+        AND g.guardian_user_id IN
+        <foreach item="userId" collection="stuParentIds" separator="," open="(" close=")">
+            #{userId}
+        </foreach>
+    </select>
+</mapper>

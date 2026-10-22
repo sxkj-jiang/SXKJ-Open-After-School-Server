@@ -1,0 +1,787 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.afterschool.mapper.AsEnrollmentMapper">
+
+    <!-- 每门课程只返回一条，不能将全部课次报名拉回 Java 再取最新记录。 -->
+    <select id="listLatestGuardianCourseEnrollments"
+            resultType="com.sxkj.edu.module.afterschool.domain.entity.AsEnrollmentEntity">
+        SELECT e.*
+        FROM t_as_enrollment e
+        INNER JOIN (
+            SELECT MAX(id) AS id
+            FROM t_as_enrollment
+            WHERE is_valid = 1
+              AND student_id = #{studentId}
+              AND session_id IS NOT NULL
+              AND enroll_status IN (0, 1, 3)
+            <choose>
+                <when test="courseClassIds != null and courseClassIds.size() > 0">
+                    AND course_class_id IN
+                    <foreach collection="courseClassIds" item="courseClassId" open="(" close=")" separator=",">
+                        #{courseClassId}
+                    </foreach>
+                </when>
+                <otherwise>AND 1 = 0</otherwise>
+            </choose>
+            GROUP BY course_class_id
+        ) latest ON latest.id = e.id
+    </select>
+
+    <!--
+        管理端未选课组班候选学生公共查询。
+        先按学生+服务压缩课次报名，再在数据库中判断当前学期是否仍有可分配实际课次，
+        避免把全校课次报名和占用记录加载到 Java 后才分页。
+    -->
+    <sql id="adminUnselectedStudentCandidateBase">
+        SELECT candidate.studentId, MAX(candidate.representativeId) AS sortId
+        FROM (
+            SELECT
+                e.service_id AS serviceId,
+                e.student_id AS studentId,
+                s.grade_id AS gradeId,
+                COALESCE(
+                    MAX(CASE WHEN e.session_id IS NOT NULL THEN e.id ELSE NULL END),
+                    MAX(e.id)
+                ) AS representativeId
+            FROM t_as_enrollment e
+            INNER JOIN t_as_student s
+                ON s.id = e.student_id
+                AND s.is_valid = 1
+                AND s.register_status = 1
+                AND s.term_id = #{termId}
+            INNER JOIN t_as_service srv
+                ON srv.id = e.service_id
+                AND srv.is_valid = 1
+                AND srv.term_id = #{termId}
+            WHERE e.is_valid = 1
+              AND e.school_id = #{schoolId}
+              AND e.service_id IN
+            <foreach collection="serviceIds" item="serviceId" open="(" close=")" separator=",">
+                #{serviceId}
+            </foreach>
+              AND (
+                    (e.enroll_status = 4
+                        AND e.session_id IS NULL
+                        AND (e.invite_id IS NULL OR e.enroll_source != 2))
+                 OR (e.enroll_status = 3
+                        AND e.enroll_source = 4
+                        AND e.course_class_id IS NULL
+                        AND e.session_id IS NULL)
+                 OR (e.enroll_status IN (1, 3)
+                        AND e.course_class_id IS NOT NULL
+                        AND e.session_id IS NOT NULL)
+              )
+            <if test="gradeId != null">
+                AND s.grade_id = #{gradeId}
+            </if>
+            <if test="classId != null">
+                AND s.class_id = #{classId}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (s.student_no LIKE CONCAT('%', #{keyword}, '%')
+                    OR s.student_name LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+            GROUP BY e.service_id, e.student_id, s.grade_id
+        ) candidate
+        WHERE (
+            EXISTS (
+                SELECT 1
+                FROM t_as_student_destination visible_destination
+                WHERE visible_destination.is_valid = 1
+                  AND visible_destination.school_id = #{schoolId}
+                  AND visible_destination.service_id = candidate.serviceId
+                  AND visible_destination.student_id = candidate.studentId
+                  AND visible_destination.course_class_id IS NULL
+                  AND visible_destination.destination_type IN (2, 3, 4)
+            )
+            <if test="assignableSlots != null and assignableSlots.size() > 0">
+                OR EXISTS (
+                    SELECT 1
+                    FROM (
+                        <foreach collection="assignableSlots" item="slot" separator=" UNION ALL ">
+                            SELECT
+                                #{slot.serviceId} AS serviceId,
+                                #{slot.sessionDate,jdbcType=TIMESTAMP} AS sessionDate,
+                                #{slot.weekDay,jdbcType=INTEGER} AS weekDay,
+                                #{slot.startMinute} AS startMinute,
+                                #{slot.endMinute} AS endMinute,
+                                #{slot.gradeScope,jdbcType=VARCHAR} AS gradeScope
+                        </foreach>
+                    ) assignable_slot
+                    WHERE assignable_slot.serviceId = candidate.serviceId
+                      AND (assignable_slot.gradeScope IS NULL
+                           OR LOCATE(CONCAT(',', candidate.gradeId, ','), assignable_slot.gradeScope) > 0)
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM t_as_enrollment occupied_enrollment
+                          INNER JOIN t_as_service occupied_service
+                              ON occupied_service.id = occupied_enrollment.service_id
+                              AND occupied_service.is_valid = 1
+                              AND occupied_service.term_id = #{termId}
+                          INNER JOIN t_as_course_session occupied_session
+                              ON occupied_session.id = occupied_enrollment.session_id
+                              AND occupied_session.is_valid = 1
+                              AND occupied_session.session_status != 3
+                          WHERE occupied_enrollment.is_valid = 1
+                            AND occupied_enrollment.school_id = #{schoolId}
+                            AND occupied_enrollment.student_id = candidate.studentId
+                            AND occupied_enrollment.enroll_status IN (1, 3)
+                            AND occupied_enrollment.course_class_id IS NOT NULL
+                            AND occupied_enrollment.session_id IS NOT NULL
+                            AND (
+                                (assignable_slot.sessionDate IS NOT NULL
+                                    AND occupied_session.session_date IS NOT NULL
+                                    AND DATE(occupied_session.session_date) = DATE(assignable_slot.sessionDate)
+                                    AND FLOOR(TIME_TO_SEC(occupied_session.start_time) / 60) = assignable_slot.startMinute
+                                    AND FLOOR(TIME_TO_SEC(occupied_session.end_time) / 60) = assignable_slot.endMinute)
+                                OR
+                                (assignable_slot.sessionDate IS NULL
+                                    AND occupied_session.session_date IS NULL
+                                    AND occupied_session.week_day = assignable_slot.weekDay
+                                    AND FLOOR(TIME_TO_SEC(occupied_session.start_time) / 60) = assignable_slot.startMinute
+                                    AND FLOOR(TIME_TO_SEC(occupied_session.end_time) / 60) = assignable_slot.endMinute)
+                            )
+                      )
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM t_as_student_destination occupied_destination
+                          INNER JOIN t_as_service destination_service
+                              ON destination_service.id = occupied_destination.service_id
+                              AND destination_service.is_valid = 1
+                              AND destination_service.term_id = #{termId}
+                          INNER JOIN t_as_course_session destination_session
+                              ON destination_session.id = occupied_destination.session_id
+                              AND destination_session.is_valid = 1
+                              AND destination_session.session_status != 3
+                          WHERE occupied_destination.is_valid = 1
+                            AND occupied_destination.school_id = #{schoolId}
+                            AND occupied_destination.student_id = candidate.studentId
+                            AND occupied_destination.course_class_id IS NULL
+                            AND occupied_destination.session_id IS NOT NULL
+                            AND occupied_destination.destination_type IN (2, 3, 4)
+                            AND (
+                                (assignable_slot.sessionDate IS NOT NULL
+                                    AND destination_session.session_date IS NOT NULL
+                                    AND DATE(destination_session.session_date) = DATE(assignable_slot.sessionDate)
+                                    AND FLOOR(TIME_TO_SEC(destination_session.start_time) / 60) = assignable_slot.startMinute
+                                    AND FLOOR(TIME_TO_SEC(destination_session.end_time) / 60) = assignable_slot.endMinute)
+                                OR
+                                (assignable_slot.sessionDate IS NULL
+                                    AND destination_session.session_date IS NULL
+                                    AND destination_session.week_day = assignable_slot.weekDay
+                                    AND FLOOR(TIME_TO_SEC(destination_session.start_time) / 60) = assignable_slot.startMinute
+                                    AND FLOOR(TIME_TO_SEC(destination_session.end_time) / 60) = assignable_slot.endMinute)
+                            )
+                      )
+                    LIMIT 1
+                )
+            </if>
+        )
+        GROUP BY candidate.studentId
+    </sql>
+
+    <select id="listAdminUnselectedStudentCandidateIds" resultType="long">
+        SELECT candidate_page.studentId
+        FROM (
+            <include refid="adminUnselectedStudentCandidateBase"/>
+        ) candidate_page
+        ORDER BY candidate_page.sortId DESC, candidate_page.studentId DESC
+    </select>
+
+    <!-- 只返回当前页候选学生编号，total 由紧随其后的 FOUND_ROWS() 在同一连接内取得。 -->
+    <select id="listAdminUnselectedStudentCandidatePageIds" resultType="long">
+        SELECT SQL_CALC_FOUND_ROWS candidate_page.studentId
+        FROM (
+            <include refid="adminUnselectedStudentCandidateBase"/>
+        ) candidate_page
+        ORDER BY candidate_page.sortId DESC, candidate_page.studentId DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <!-- 必须紧跟 SQL_CALC_FOUND_ROWS 分页查询执行，调用方通过只读事务固定数据库连接。 -->
+    <select id="selectFoundRows" resultType="long">
+        SELECT FOUND_ROWS()
+    </select>
+
+    <!--
+        查询学生在指定课程班下最新的有效报名记录。
+        优先返回有课次分配(session_id IS NOT NULL)的记录。
+    -->
+    <select id="findEnrollmentByCourseAndStudent" resultType="com.sxkj.edu.module.afterschool.domain.entity.AsEnrollmentEntity">
+        SELECT *
+        FROM t_as_enrollment
+        WHERE is_valid = 1
+          AND course_class_id = #{courseClassId}
+          AND student_id = #{studentId}
+          AND session_id IS NOT NULL
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+    <!-- 家长查询学生选课记录（平铺结构，按课次维度） -->
+    <select id="listParentEnrollmentCourses" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsParentEnrollmentFlatVO">
+        SELECT DISTINCT
+            t.id AS termId,
+            t.term_name AS termName,
+            cc.id AS courseClassId,
+            cc.course_class_name AS courseClassName,
+            cs.week_day AS weekDay,
+            DATE_FORMAT(cs.start_time, '%H:%i') AS startTime,
+            DATE_FORMAT(cs.end_time, '%H:%i') AS endTime,
+            cc.place_id AS placeId,
+            cat.category_name AS categoryName,
+            cc.enroll_type AS enrollType,
+            e.enroll_time studentEnrollTime,
+            e.student_id studentId,
+            srv.course_start_date classStartTime,
+            srv.course_end_date classEndTime
+        FROM t_as_enrollment e
+        INNER JOIN t_as_course_class cc ON e.course_class_id = cc.id AND cc.is_valid = 1
+        INNER JOIN t_as_service srv ON e.service_id = srv.id AND srv.is_valid = 1
+        LEFT JOIN t_educl_term t ON srv.term_id = t.id AND t.is_valid = 1
+        LEFT JOIN t_as_course_session cs ON cs.course_class_id = cc.id AND cs.is_valid = 1 AND cs.session_status != 3
+        LEFT JOIN t_as_course_category cat ON cc.category_id = cat.id AND cat.is_valid = 1
+        WHERE e.is_valid = 1
+            AND e.enroll_status = 1
+            AND e.student_id in
+            <foreach collection="studentIdList" open="(" close=")" item="item" separator=",">
+                #{item}
+            </foreach>
+            AND e.school_id = #{schoolId}
+        <if test="termId != null">
+            AND srv.term_id = #{termId}
+        </if>
+        ORDER BY t.id ASC, cc.id ASC, cs.week_day ASC, cs.start_time ASC
+    </select>
+
+    <!-- 管理端-查询学生报名记录 -->
+    <select id="queryStudentEnrollmentForList" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsStudentEnrollmentRegistTermVO">
+        SELECT distinct
+            t.service_id,
+            t.student_id,
+            t.student_no,
+            t.course_class_id,
+            t.enroll_status,
+            t.enroll_time as enrollmentTime,
+            s.student_identity_id,
+            s.term_id
+        FROM
+            t_as_enrollment t,
+            t_as_student s
+        WHERE
+            t.student_id = s.id
+          AND t.school_id = #{schoolId}
+          AND s.id = #{studentId}
+          and t.course_class_id is not null
+          and t.is_valid = 1
+          and s.is_valid = 1
+          and t.enroll_status =1
+          and s.term_id = #{termId}
+          order by t.enroll_time desc
+    </select>
+
+    <!--
+        班主任课后报名 Tab 数量统计（已报名 + 已分配），单次条件聚合。
+        registeredCount: 已报名（自主报名/邀请/行政班安排，有课程班+课次）
+        assignedCount:   已分配（后台手动分配，有课程班+课次 或 有非课程去向）
+    -->
+    <select id="countHeadteacherEnrollmentStatuses" resultType="java.util.HashMap">
+        SELECT
+            COUNT(DISTINCT CASE
+                WHEN (
+                    (e.enroll_status = 1 AND e.enroll_source IN (1, 2))
+                    OR (e.enroll_status = 3 AND e.enroll_source = 3)
+                ) AND e.course_class_id IS NOT NULL AND e.session_id IS NOT NULL
+                THEN CONCAT(e.student_id, ':', COALESCE(srv.term_id, 0), ':', e.course_class_id)
+            END) AS registeredCount,
+            COUNT(DISTINCT CASE
+                WHEN e.enroll_status = 3 AND e.enroll_source = 4
+                    AND (
+                        (e.course_class_id IS NOT NULL AND e.session_id IS NOT NULL)
+                        OR (ncd.id IS NOT NULL)
+                    )
+                THEN CONCAT(e.student_id, ':', COALESCE(srv.term_id, 0), ':',
+                    CASE WHEN e.course_class_id IS NOT NULL
+                        THEN CAST(e.course_class_id AS CHAR)
+                        ELSE CONCAT('U:', e.service_id)
+                    END)
+            END) AS assignedCount
+        FROM t_as_enrollment e
+        INNER JOIN t_as_service srv ON e.service_id = srv.id AND srv.is_valid = 1
+        LEFT JOIN t_as_student_destination ncd
+            ON ncd.is_valid = 1
+            AND ncd.school_id = e.school_id
+            AND ncd.service_id = e.service_id
+            AND ncd.student_id = e.student_id
+            AND ncd.course_class_id IS NULL
+            AND ncd.destination_type IN (2, 3, 4)
+        WHERE e.is_valid = 1
+        <if test="schoolId != null">
+            AND e.school_id = #{schoolId}
+        </if>
+            AND e.student_id IN
+            <foreach collection="studentIds" open="(" close=")" item="sid" separator=",">
+                #{sid}
+            </foreach>
+            AND e.service_id IN
+            <foreach collection="serviceIds" open="(" close=")" item="sid" separator=",">
+                #{sid}
+            </foreach>
+        <if test="termId != null">
+            AND srv.term_id = #{termId}
+        </if>
+    </select>
+
+    <!--
+        管理端选课状态统计：单次 JOIN 加载报名记录 + 学生 + 服务 + 课程班。
+        Service 层在 Java 侧拆分已选/未选并复用后处理逻辑，避免重复查询。
+    -->
+    <!--
+        未选课统计：仅加载尚未分配到课程班/课次的报名记录及关联学生、课后服务信息。
+        已选计数由 countSelectedPageData 在 SQL 层完成，此处只服务于未选计数路径。
+        WHERE 条件 e.course_class_id IS NULL AND e.session_id IS NULL 精准定位未选记录，
+        避免加载全量报名数据后在 Java 侧拆分。
+    -->
+    <select id="listUnselectedCountData" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsEnrollmentSelectionCountData">
+        SELECT
+            e.id              AS enrollmentId,
+            e.school_id       AS schoolId,
+            e.service_id      AS serviceId,
+            e.student_id      AS studentId,
+            e.student_no      AS studentNo,
+            e.enroll_status   AS enrollStatus,
+            e.invite_id       AS inviteId,
+            e.enroll_time     AS enrollTime,
+            s.student_name    AS studentName,
+            s.grade_id        AS gradeId,
+            s.class_id        AS classId,
+            s.register_status AS registerStatus,
+            s.term_id         AS studentTermId,
+            srv.term_id       AS serviceTermId
+        FROM t_as_enrollment e
+        INNER JOIN t_as_student s ON e.student_id = s.id AND s.is_valid = 1
+        INNER JOIN t_as_service srv ON e.service_id = srv.id AND srv.is_valid = 1
+        WHERE e.is_valid = 1
+          AND e.course_class_id IS NULL
+          AND e.session_id IS NULL
+        <if test="schoolId != null">
+            AND e.school_id = #{schoolId}
+        </if>
+        <if test="serviceIds != null and serviceIds.size() > 0">
+            AND e.service_id IN
+            <foreach collection="serviceIds" item="sid" open="(" close=")" separator=",">
+                #{sid}
+            </foreach>
+        </if>
+        <if test="gradeId != null">
+            AND s.grade_id = #{gradeId}
+        </if>
+        <if test="classId != null">
+            AND s.class_id = #{classId}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (s.student_no LIKE CONCAT('%', #{keyword}, '%')
+                 OR s.student_name LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        ORDER BY e.id DESC
+    </select>
+
+    <!-- 仅返回去重后的学生编号，避免为了判断记录是否存在而加载全部课次报名实体。 -->
+    <select id="listExistingEnrollmentStudentIds" resultType="long">
+        SELECT DISTINCT student_id
+        FROM t_as_enrollment
+        WHERE is_valid = 1
+          AND school_id = #{schoolId}
+          AND service_id = #{serviceId}
+          AND student_id IN
+        <foreach collection="studentIds" item="studentId" open="(" close=")" separator=",">
+            #{studentId}
+        </foreach>
+    </select>
+
+    <!--
+        占位补偿只查询真正缺失报名记录的学生，并按批次返回，
+        避免先把服务范围内全部学生和已有报名编号加载到 Java。
+    -->
+    <select id="listMissingPlaceholderStudents"
+            resultType="com.sxkj.edu.module.afterschool.domain.entity.AsStudentEntity">
+        SELECT s.id, s.school_id, s.term_id, s.student_no
+        FROM t_as_student s
+        WHERE s.is_valid = 1
+          AND s.school_id = #{schoolId}
+          AND s.term_id = #{termId}
+          AND s.register_status = 1
+          AND s.class_id IN
+        <foreach collection="classIds" item="scopeClassId" open="(" close=")" separator=",">
+            #{scopeClassId}
+        </foreach>
+        <if test="gradeId != null">
+            AND s.grade_id = #{gradeId}
+        </if>
+        <if test="classId != null">
+            AND s.class_id = #{classId}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (LOCATE(CAST(#{keyword} AS BINARY), CAST(s.student_no AS BINARY)) > 0
+                 OR LOCATE(CAST(#{keyword} AS BINARY), CAST(s.student_name AS BINARY)) > 0)
+        </if>
+          AND NOT EXISTS (
+              SELECT 1
+              FROM t_as_enrollment e
+              WHERE e.is_valid = 1
+                AND e.school_id = #{schoolId}
+                AND e.service_id = #{serviceId}
+                AND e.student_id = s.id
+          )
+        ORDER BY s.id ASC
+        LIMIT #{limit}
+    </select>
+
+    <!--
+        状态统计只需要学生在学期内已占用的时间，不需要加载完整报名和课次实体。
+        课程报名与回家、校外机构等非课程去向保持原有有效状态和课次过滤口径。
+    -->
+    <select id="listStudentTermOccupiedSlots"
+            resultType="com.sxkj.edu.module.afterschool.domain.vo.AsEnrollmentOccupiedSlotData">
+        SELECT DISTINCT
+            occupied.schoolId,
+            occupied.termId,
+            occupied.studentId,
+            occupied.sessionId,
+            occupied.sessionDate,
+            occupied.weekDay,
+            occupied.startTime,
+            occupied.endTime
+        FROM (
+            SELECT
+                e.school_id AS schoolId,
+                srv.term_id AS termId,
+                e.student_id AS studentId,
+                CASE
+                    WHEN cs.session_date IS NULL
+                        AND (cs.week_day IS NULL OR cs.start_time IS NULL OR cs.end_time IS NULL)
+                    THEN cs.id
+                    ELSE NULL
+                END AS sessionId,
+                cs.session_date AS sessionDate,
+                cs.week_day AS weekDay,
+                cs.start_time AS startTime,
+                cs.end_time AS endTime
+            FROM t_as_enrollment e
+            INNER JOIN t_as_service srv
+                ON srv.id = e.service_id
+                AND srv.is_valid = 1
+            INNER JOIN t_as_course_session cs
+                ON cs.id = e.session_id
+                AND cs.is_valid = 1
+                AND cs.session_status != 3
+            WHERE e.is_valid = 1
+              AND e.enroll_status IN (1, 3)
+              AND e.course_class_id IS NOT NULL
+              AND e.session_id IS NOT NULL
+              AND e.school_id IN
+            <foreach collection="schoolIds" item="schoolId" open="(" close=")" separator=",">
+                #{schoolId}
+            </foreach>
+              AND srv.term_id IN
+            <foreach collection="termIds" item="termId" open="(" close=")" separator=",">
+                #{termId}
+            </foreach>
+              AND e.student_id IN
+            <foreach collection="studentIds" item="studentId" open="(" close=")" separator=",">
+                #{studentId}
+            </foreach>
+
+            UNION ALL
+
+            SELECT
+                d.school_id AS schoolId,
+                srv.term_id AS termId,
+                d.student_id AS studentId,
+                CASE
+                    WHEN cs.session_date IS NULL
+                        AND (cs.week_day IS NULL OR cs.start_time IS NULL OR cs.end_time IS NULL)
+                    THEN cs.id
+                    ELSE NULL
+                END AS sessionId,
+                cs.session_date AS sessionDate,
+                cs.week_day AS weekDay,
+                cs.start_time AS startTime,
+                cs.end_time AS endTime
+            FROM t_as_student_destination d
+            INNER JOIN t_as_service srv
+                ON srv.id = d.service_id
+                AND srv.is_valid = 1
+            INNER JOIN t_as_course_session cs
+                ON cs.id = d.session_id
+                AND cs.is_valid = 1
+                AND cs.session_status != 3
+            WHERE d.is_valid = 1
+              AND d.course_class_id IS NULL
+              AND d.session_id IS NOT NULL
+              AND d.destination_type IN (2, 3, 4)
+              AND d.school_id IN
+            <foreach collection="schoolIds" item="schoolId" open="(" close=")" separator=",">
+                #{schoolId}
+            </foreach>
+              AND srv.term_id IN
+            <foreach collection="termIds" item="termId" open="(" close=")" separator=",">
+                #{termId}
+            </foreach>
+              AND d.student_id IN
+            <foreach collection="studentIds" item="studentId" open="(" close=")" separator=",">
+                #{studentId}
+            </foreach>
+        ) occupied
+    </select>
+
+    <!--
+        已选课组班分页查询公共 SQL 片段。
+        通过单次多表 JOIN 加载列表行所需全部字段，过滤条件下推到 SQL，
+        按 student_id + service_id + course_class_id 去重（保留最新报名记录），
+        子查询聚合已学课时，避免额外数据库请求。
+    -->
+    <sql id="selectedPageDataBaseSelect">
+        SELECT
+            e.id              AS enrollmentId,
+            e.school_id       AS schoolId,
+            e.service_id      AS serviceId,
+            e.course_class_id AS courseClassId,
+            e.session_id      AS sessionId,
+            e.student_id      AS studentId,
+            e.student_no      AS studentNo,
+            e.enroll_source   AS enrollSource,
+            e.enroll_status   AS enrollStatus,
+            e.operator_type   AS operatorType,
+            e.operator_user_id AS operatorUserId,
+            e.operator_name   AS operatorName,
+            e.enroll_time     AS enrollTime,
+            s.student_name    AS studentName,
+            s.gender          AS gender,
+            s.grade_id        AS gradeId,
+            s.class_id        AS classId,
+            s.register_status AS registerStatus,
+            s.term_id         AS studentTermId,
+            s.student_identity_id AS studentIdentityId,
+            srv.service_name  AS serviceName,
+            srv.term_id       AS serviceTermId,
+            cc.course_class_name AS courseClassName,
+            cc.category_id    AS categoryId,
+            cc.enroll_type    AS enrollType,
+            cc.capacity       AS capacity,
+            cat.category_name AS categoryName,
+            t.term_name       AS termName,
+            g.grade_name      AS gradeName,
+            cl.class_name     AS className,
+            IFNULL(lc.learnedSessions, 0) AS learnedSessions
+        FROM t_as_enrollment e
+        INNER JOIN t_as_student s ON e.student_id = s.id AND s.is_valid = 1
+        INNER JOIN t_as_service srv ON e.service_id = srv.id AND srv.is_valid = 1
+        LEFT JOIN t_as_course_class cc ON e.course_class_id = cc.id AND cc.is_valid = 1
+        LEFT JOIN t_as_course_category cat ON cc.category_id = cat.id AND cat.is_valid = 1
+        LEFT JOIN t_educl_term t ON srv.term_id = t.id AND t.is_valid = 1
+        LEFT JOIN t_educl_grade g ON s.grade_id = g.id AND g.is_valid = 1
+        LEFT JOIN t_educl_class cl ON s.class_id = cl.id AND cl.is_valid = 1
+        LEFT JOIN (
+            SELECT a.student_id, cs.course_class_id, COUNT(DISTINCT a.session_id) AS learnedSessions
+            FROM t_as_attendance_record a
+            INNER JOIN t_as_course_session cs ON a.session_id = cs.id AND cs.is_valid = 1
+            WHERE a.is_valid = 1
+              AND a.target_type = 1
+              AND a.attendance_status IN (1, 2, 3)
+              AND cs.session_status != 3
+            GROUP BY a.student_id, cs.course_class_id
+        ) lc ON lc.student_id = e.student_id AND lc.course_class_id = e.course_class_id
+        WHERE e.is_valid = 1
+          AND e.course_class_id IS NOT NULL
+          AND e.session_id IS NOT NULL
+          AND e.enroll_status IN (1, 3)
+          AND s.register_status IN (0, 1)
+          AND s.term_id = srv.term_id
+        <if test="schoolId != null">
+            AND e.school_id = #{schoolId}
+        </if>
+        <if test="serviceIds != null and serviceIds.size() > 0">
+            AND e.service_id IN
+            <foreach collection="serviceIds" item="sid" open="(" close=")" separator=",">
+                #{sid}
+            </foreach>
+        </if>
+        <if test="gradeId != null">
+            AND s.grade_id = #{gradeId}
+        </if>
+        <if test="classId != null">
+            AND s.class_id = #{classId}
+        </if>
+        <if test="enrollType != null">
+            AND cc.enroll_type = #{enrollType}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (s.student_no LIKE CONCAT('%', #{keyword}, '%')
+                 OR s.student_name LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+    </sql>
+
+    <!--
+        已选课组班分页查询：单次多表 JOIN + 去重 + 数据库分页。
+        通过子查询取每组（学生+服务+课程班）最大 enrollment_id 实现去重，
+        保留与原 Java 逻辑一致的“最新记录优先”语义。
+    -->
+    <select id="listSelectedPageData" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsEnrollmentSelectedPageData">
+        SELECT SQL_CALC_FOUND_ROWS base.*
+        FROM (
+            <include refid="selectedPageDataBaseSelect"/>
+        ) base
+        INNER JOIN (
+            SELECT MAX(e2.id) AS maxId
+            FROM t_as_enrollment e2
+            INNER JOIN t_as_student s2 ON e2.student_id = s2.id AND s2.is_valid = 1
+            INNER JOIN t_as_service srv2 ON e2.service_id = srv2.id AND srv2.is_valid = 1
+            LEFT JOIN t_as_course_class cc2 ON e2.course_class_id = cc2.id AND cc2.is_valid = 1
+            WHERE e2.is_valid = 1
+              AND e2.course_class_id IS NOT NULL
+              AND e2.session_id IS NOT NULL
+              AND e2.enroll_status IN (1, 3)
+              AND s2.register_status IN (0, 1)
+              AND s2.term_id = srv2.term_id
+            <if test="schoolId != null">
+                AND e2.school_id = #{schoolId}
+            </if>
+            <if test="serviceIds != null and serviceIds.size() > 0">
+                AND e2.service_id IN
+                <foreach collection="serviceIds" item="sid" open="(" close=")" separator=",">
+                    #{sid}
+                </foreach>
+            </if>
+            <if test="gradeId != null">
+                AND s2.grade_id = #{gradeId}
+            </if>
+            <if test="classId != null">
+                AND s2.class_id = #{classId}
+            </if>
+            <if test="enrollType != null">
+                AND cc2.enroll_type = #{enrollType}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (s2.student_no LIKE CONCAT('%', #{keyword}, '%')
+                     OR s2.student_name LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+            GROUP BY s2.id, e2.service_id, e2.course_class_id
+        ) grp ON base.enrollmentId = grp.maxId
+        ORDER BY base.enrollmentId DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <!--
+        已选课组班总记录数：与 listSelectedPageData 使用相同的去重和过滤逻辑。
+    -->
+    <select id="countSelectedPageData" resultType="long">
+        SELECT COUNT(*)
+        FROM (
+            SELECT MAX(e2.id) AS maxId
+            FROM t_as_enrollment e2
+            INNER JOIN t_as_student s2 ON e2.student_id = s2.id AND s2.is_valid = 1
+            INNER JOIN t_as_service srv2 ON e2.service_id = srv2.id AND srv2.is_valid = 1
+            LEFT JOIN t_as_course_class cc2 ON e2.course_class_id = cc2.id AND cc2.is_valid = 1
+            WHERE e2.is_valid = 1
+              AND e2.course_class_id IS NOT NULL
+              AND e2.session_id IS NOT NULL
+              AND e2.enroll_status IN (1, 3)
+              AND s2.register_status IN (0, 1)
+              AND s2.term_id = srv2.term_id
+            <if test="schoolId != null">
+                AND e2.school_id = #{schoolId}
+            </if>
+            <if test="serviceIds != null and serviceIds.size() > 0">
+                AND e2.service_id IN
+                <foreach collection="serviceIds" item="sid" open="(" close=")" separator=",">
+                    #{sid}
+                </foreach>
+            </if>
+            <if test="gradeId != null">
+                AND s2.grade_id = #{gradeId}
+            </if>
+            <if test="classId != null">
+                AND s2.class_id = #{classId}
+            </if>
+            <if test="enrollType != null">
+                AND cc2.enroll_type = #{enrollType}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (s2.student_no LIKE CONCAT('%', #{keyword}, '%')
+                     OR s2.student_name LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+            GROUP BY s2.id, e2.service_id, e2.course_class_id
+        ) grouped
+    </select>
+
+    <!-- 邀请学生分页只读取冲突判断所需的学生、课程班及占用状态。 -->
+    <select id="listInviteActiveCourseEnrollments"
+            resultType="com.sxkj.edu.module.afterschool.domain.entity.AsEnrollmentEntity">
+        SELECT MIN(e.id) AS id,
+               e.school_id,
+               e.student_id,
+               e.course_class_id,
+               MAX(e.enroll_status) AS enroll_status
+        FROM t_as_enrollment e
+        INNER JOIN t_as_course_session cs
+                ON cs.id = e.session_id
+               AND cs.is_valid = 1
+               AND cs.session_status != 3
+        INNER JOIN t_as_course_class cc
+                ON cc.id = e.course_class_id
+               AND cc.is_valid = 1
+        WHERE e.is_valid = 1
+          AND e.school_id = #{schoolId}
+          AND e.student_id IN
+        <foreach collection="studentIds" item="studentId" open="(" close=")" separator=",">
+            #{studentId}
+        </foreach>
+          AND e.session_id IS NOT NULL
+          AND e.course_class_id IS NOT NULL
+          AND e.enroll_status IN (0, 1, 3)
+        GROUP BY e.school_id, e.student_id, e.course_class_id
+    </select>
+
+    <!-- 邀请学生分页只读取每个学校、学生最新的一条有效课次报名记录。 -->
+    <select id="listInviteLatestSessionEnrollments"
+            resultType="com.sxkj.edu.module.afterschool.domain.entity.AsEnrollmentEntity">
+        SELECT e.id,
+               e.school_id,
+               e.student_id,
+               e.course_class_id,
+               e.enroll_status,
+               e.invite_id,
+               e.update_time
+        FROM t_as_enrollment e
+        WHERE e.is_valid = 1
+          AND e.student_id IN
+        <foreach collection="studentIds" item="studentId" open="(" close=")" separator=",">
+            #{studentId}
+        </foreach>
+          AND e.session_id IS NOT NULL
+        <if test="schoolIds != null and schoolIds.size() > 0">
+          AND e.school_id IN
+            <foreach collection="schoolIds" item="schoolId" open="(" close=")" separator=",">
+                #{schoolId}
+            </foreach>
+        </if>
+          AND NOT EXISTS (
+              SELECT 1
+              FROM t_as_enrollment newer
+              WHERE newer.is_valid = 1
+                AND newer.school_id = e.school_id
+                AND newer.student_id = e.student_id
+                AND newer.session_id IS NOT NULL
+                AND (
+                    (newer.update_time IS NOT NULL AND e.update_time IS NULL)
+                    OR newer.update_time &gt; e.update_time
+                    OR (
+                        (newer.update_time = e.update_time
+                         OR (newer.update_time IS NULL AND e.update_time IS NULL))
+                        AND newer.id &gt; e.id
+                    )
+                )
+          )
+    </select>
+</mapper>

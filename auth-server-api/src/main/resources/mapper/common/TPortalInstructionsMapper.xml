@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.sxkj.edu.module.mapper.sys.InstructionMapper">
+    <select id="instructionsPageList" resultType="com.sxkj.edu.domain.base.mult.TPortalInstructionslVO">
+        select
+        id,
+        oper_type operType,
+        oper_name operName,
+        oper_role operRole,
+        oper_status operStatus,
+        update_time updateTime,
+        create_time createTime
+        from t_instructions
+        where is_valid=1
+        <if test="query.operType != null and query.operType != 0">
+            and oper_type = #{query.operType}
+        </if>
+        <if test="query.operName != null and query.operName != ''">
+            and oper_name like concat('%', #{query.operName}, '%')
+        </if>
+        <if test="query.startTime !=null and query.endTime!=null">
+            and create_time between #{query.startTime} and #{query.endTime}
+        </if>
+        order by create_time desc
+    </select>
+</mapper>

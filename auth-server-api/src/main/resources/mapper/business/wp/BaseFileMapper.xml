@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.sxkj.edu.module.business.dao.WpBaseFileDao">
+
+
+    <select id="selectFilePage" parameterType="com.sxkj.edu.domain.ao.wp.QueryShareFileAo" resultType="com.sxkj.edu.domain.vo.wp.QueryFilePageVO">
+        SELECT c.id,
+        c.user_id userId,
+        c.file_md5 fileMd5,
+        c.file_name fileName,
+        c.file_url fileUrl,
+        c.is_dir isDir,
+        c.is_valid isValid,
+        c.file_size fileSize,
+        c.file_path filePath,
+        c.create_time uploadTime,
+        c.storage_type storageType,
+        c.extend_name extendName,
+        c.update_time updateTime,
+        c.delete_time deleteTime,
+        cs.school_name  schoolName,
+        u.actual_name userName
+        FROM t_wp_user_file c
+        LEFT JOIN t_base_user u ON c.user_id = u.id
+        LEFT JOIN t_school_manage cs on cs.id = c.school_id
+        WHERE c.is_valid =1
+        and u.is_valid =1
+        and c.status in(0,1)
+        <if test="query.fileLabelId != null and query.fileLabelId.size > 0">
+            AND EXISTS (
+                select 1 from t_wp_user_file_label ufl
+                where ufl.file_id = c.id and ufl.is_valid = 1
+                AND ufl.label_id IN
+                <foreach collection="query.fileLabelId" open="(" close= ")" item="item" separator=","  >
+                    #{item}
+                </foreach>
+            )
+        </if>
+        <if test="query.keyword != null and query.keyword != ''">
+            <bind name="likeName" value=" '%' + query.keyword +'%' "></bind>
+            AND (u.actual_name like #{likeName} or c.file_name like #{likeName})
+        </if>
+        <if test="query.storageType != null and query.storageType !=0">
+            and c.storage_type = #{query.storageType}
+        </if>
+        <if test="query.startTime != null and query.endTime != null">
+            and c.create_time &gt;= #{query.startTime}
+            and c.create_time &lt;= #{query.endTime}
+        </if>
+        <if test="query.userId != null and query.userId !=0">
+            and c.user_id = #{query.userId}
+        </if>
+        <if test="query.schoolId != null and query.schoolId !=0">
+            and c.school_id = #{query.schoolId}
+        </if>
+        <if test="query.extentName != null and query.extentName !=''">
+            and c.extent_name = #{query.extentName}
+        </if>
+        order BY c.create_time desc
+    </select>
+
+
+    <select id="selectFilePageDetail" resultType="com.sxkj.edu.domain.vo.wp.QueryFilePageVO">
+        SELECT c.id,
+        c.user_id userId,
+        c.file_md5 fileMd5,
+        c.file_name fileName,
+        c.file_url fileUrl,
+        c.is_dir isDir,
+        c.is_valid isValid,
+        c.file_size fileSize,
+        c.file_path filePath,
+        c.create_time uploadTime,
+        u.actual_name userName,
+        c.storage_type storageType,
+        c.extend_name extendName
+        FROM t_wp_user_file c
+        LEFT JOIN t_base_user u ON c.user_id = u.id
+        WHERE c.is_valid =1
+        and u.is_valid =1
+        and c.id = #{id}
+        order BY c.create_time desc
+    </select>
+
+    <select id="selectStorageSizeByUserId" resultType="java.lang.Long" parameterType="java.lang.Long">
+        SELECT SUM(a.file_size) FROM t_wp_user_file a
+        WHERE a.user_id = #{userId} and a.is_valid =1
+    </select>
+</mapper>

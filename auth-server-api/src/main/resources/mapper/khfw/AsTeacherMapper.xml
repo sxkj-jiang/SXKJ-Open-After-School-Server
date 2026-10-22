@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.afterschool.mapper.AsTeacherMapper">
+
+    <!-- 教师档案分页查询，关联t_base_user，状态以t_base_user为准 -->
+    <select id="pageTeacherWithUser" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsTeacherVO">
+        SELECT
+            t.id,
+            t.school_id AS schoolId,
+            t.user_id AS userId,
+            t.teacher_no AS teacherNo,
+            t.teacher_name AS teacherName,
+            t.gender,
+            t.phone,
+            t.id_card AS idCard,
+            t.school_stage AS schoolStage,
+            t.position_name AS positionName,
+            t.employee_status AS employeeStatus,
+            t.register_status AS registerStatus,
+            u.status AS status,
+            t.is_head_teacher AS isHeadTeacher,
+            t.avatar_file_id AS avatarFileId,
+            u.logo_url AS imgUrl,
+            ec.class_name,
+            eg.grade_name
+        FROM t_as_teacher t
+        LEFT JOIN t_base_user u ON t.user_id = u.id AND u.is_valid = 1
+        LEFT JOIN t_as_teacher_class tc ON tc.teacher_id = t.id AND tc.is_valid = 1
+        LEFT JOIN t_educl_class ec ON ec.id = tc.class_id AND ec.is_valid = 1
+        LEFT JOIN t_educl_grade eg ON eg.id = ec.grade_id AND eg.is_valid = 1
+        <where>
+            t.is_valid = 1
+            <if test="query.schoolId != null">
+                AND t.school_id = #{query.schoolId}
+            </if>
+            <if test="query.teacherName != null and query.teacherName != ''">
+                AND t.teacher_name LIKE CONCAT('%', #{query.teacherName}, '%')
+            </if>
+            <if test="query.phone != null and query.phone != ''">
+                AND t.phone LIKE CONCAT('%', #{query.phone}, '%')
+            </if>
+            <if test="query.schoolStage != null and query.schoolStage != ''">
+                AND t.school_stage = #{query.schoolStage}
+            </if>
+            <if test="query.employeeStatus != null">
+                AND t.employee_status = #{query.employeeStatus}
+            </if>
+            <if test="query.registerStatus != null and query.registerStatus != 0">
+                AND t.register_status = #{query.registerStatus}
+                AND u.approve_status = #{query.userStatus}
+            </if>
+            <if test="query.registerStatus != null and query.registerStatus == 0">
+                AND t.register_status = #{query.registerStatus}
+            </if>
+            <if test="query.subjectId != null and query.subjectId != 0">
+                AND EXISTS (
+                    SELECT 1 FROM t_teacher_subject ts
+                    WHERE ts.teacher_id = t.id
+                      AND ts.subject_id = #{query.subjectId}
+                      AND ts.is_valid = 1
+                )
+            </if>
+        </where>
+        GROUP BY t.id
+        ORDER BY t.school_id DESC,
+            t.teacher_name ASC
+    </select>
+
+    <!-- 教师审核状态汇总：按 register_status 分组统计 -->
+    <select id="selectAuditSummary" resultType="java.util.Map">
+        SELECT
+            t.register_status AS registerStatus,
+            COUNT(*) AS cnt
+        FROM t_as_teacher t
+        WHERE t.is_valid = 1
+          AND t.school_id = #{schoolId}
+        GROUP BY t.register_status
+    </select>
+
+    <select id="selectTeacherByCourseId" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsTeacherByStudentIdVO">
+        SELECT
+            t.id teacherId,
+            t.teacher_name
+        FROM
+            t_as_course_class c,
+            t_as_teacher t
+        WHERE
+            c.teacher_id = t.id
+          AND c.school_id = #{schoolId}
+          AND c.id = #{courseId}
+    </select>
+
+    <select id="queryTeacherBaseUserAuditStatus" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsTeacherBaseUserVO">
+        SELECT
+            u.id,
+            u.login_name,
+            u.approve_status auditStatus
+        FROM
+            t_base_user u,
+            t_as_teacher t
+        WHERE
+            u.phone = t.phone
+          AND u.is_valid = 1
+          AND t.is_valid = 1
+          and u.school_id = #{schoolId}
+          AND u.login_name = #{loginName}
+    </select>
+
+    <!-- 批量查询存在待审核账号(approve_status=0)的教师手机号 -->
+    <select id="selectPendingAuditPhones" resultType="java.lang.String">
+        SELECT DISTINCT t.phone
+        FROM t_as_teacher t
+        INNER JOIN t_base_user u ON u.phone = t.phone AND u.is_valid = 1
+        WHERE t.is_valid = 1
+        AND u.school_id = #{schoolId}
+        AND u.approve_status = 0
+        AND t.phone IN
+        <foreach collection="phones" item="phone" open="(" separator="," close=")">
+            #{phone}
+        </foreach>
+    </select>
+    <select id="listTeacherCourseStudents" resultType="com.sxkj.edu.domain.vo.AsTeacherCourseStudentVO">
+        SELECT
+            cc.id AS courseClassId,
+            cc.course_class_name AS courseClassName,
+            stu.class_id AS classId,
+            stu.student_name AS studentName,
+            stu.student_no AS studentNo,
+            CONCAT(IFNULL(g.grade_name, ''), IFNULL(c.class_name, '')) AS gradeClassName
+        FROM t_as_course_class cc
+        INNER JOIN t_as_enrollment e ON e.course_class_id = cc.id AND e.is_valid = 1
+        AND e.enroll_status IN (1, 3)
+        INNER JOIN t_as_student stu ON stu.id = e.student_id AND stu.is_valid = 1 AND stu.register_status = 1
+        LEFT JOIN t_educl_class c ON c.id = stu.class_id AND c.is_valid = 1
+        LEFT JOIN t_educl_grade g ON g.id = stu.grade_id AND g.is_valid = 1
+        WHERE cc.is_valid = 1
+        AND cc.teacher_id = #{query.teacherId}
+        AND cc.school_id = #{query.schoolId}
+        <if test="query.keyword != null and query.keyword != ''">
+            AND (stu.student_name LIKE CONCAT('%', #{query.keyword}, '%')
+            OR stu.student_no LIKE CONCAT('%', #{query.keyword}, '%'))
+        </if>
+        GROUP BY stu.id,cc.id
+        ORDER BY stu.student_no ASC
+    </select>
+
+</mapper>

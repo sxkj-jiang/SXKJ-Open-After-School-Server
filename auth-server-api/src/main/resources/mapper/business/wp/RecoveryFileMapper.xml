@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.sxkj.edu.module.mapper.wp.RecoveryFileMapper">
+
+    <select id="selectFileRecoveryPage" resultType="com.sxkj.edu.domain.vo.wp.QueryRecoveryPageVO">
+        SELECT c.id,
+        c.user_id userId,
+        u.actual_name userName,
+        c.file_md5 fileMd5,
+        c.file_name fileName,
+        c.file_url fileUrl,
+        c.file_size fileSize,
+        c.file_path filePath,
+        c.is_dir isDir,
+        c.delete_time deleteTime,
+        c.is_valid isValid,
+        c.extend_name extendName,
+        c.delete_batch_num deleteBatchNum
+        FROM t_recoveryfile a
+        LEFT JOIN t_wp_user_file c ON c.id = a.user_file_id
+        LEFT JOIN t_base_user u ON u.id = c.user_id
+        LEFT JOIN t_wp_file_label f ON c.label_id = f.id
+        WHERE a.is_valid =1 and u.is_valid =1
+        and c.is_valid =1 and f.is_valid =1
+        <if test="query.fileLabelId != null and query.fileLabelId.size > 0">
+            AND c.label_id IN
+            <foreach collection="query.fileLabelId" open="(" close= ")" item="item" separator=","  >
+                #{item}
+            </foreach>
+        </if>
+        <if test="query.keyword != null and query.keyword != ''">
+            <bind name="likeName" value=" '%' + query.keyword +'%' "></bind>
+            AND (u.actual_name like #{likeName} or c.file_name like #{likeName})
+        </if>
+        order BY c.delete_time desc
+    </select>
+
+<!--    <select id="selectRecoveryFileList" resultType="com.sxkj.wp.domain.vo.file.RecoveryFileListVo">-->
+<!--        SELECT-->
+<!--        a.id recoveryFileId,-->
+<!--        a.delete_batch_num deleteBatchNum,-->
+<!--        a.user_file_id userFileId,-->
+<!--        b.share_file_id shareFileId,-->
+<!--        b.user_file_id userFileId,-->
+<!--        b.share_file_path shareFilePath,-->
+<!--        c.file_name fileName,-->
+<!--        c.file_path filePath,-->
+<!--        c.extend_name extendName,-->
+<!--        c.is_dir isDir,-->
+<!--        c.delete_flag deleteFlag,-->
+<!--        c.delete_time deleteTime-->
+<!--        FROM t_recoveryfile a-->
+<!--        LEFT JOIN t_wp_user_file b ON a.user_file_id = b.user_file_id-->
+<!--        left join t_base_file c on c.file_id = b.file_id-->
+<!--        WHERE b.user_id = #{userId}-->
+<!--    </select>-->
+</mapper>

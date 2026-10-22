@@ -1,0 +1,342 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.system.employee.TBaseUserDao">
+
+
+    <resultMap id="EmployeeDTO"
+               type="com.sxkj.edu.module.system.employee.domain.dto.EmployeeDTO"></resultMap>
+
+    <resultMap id="EmployeeVO" type="com.sxkj.edu.module.system.employee.domain.vo.EmployeeVO"></resultMap>
+
+    <sql id="baseSql">
+        e.id,
+        e.login_name,
+        e.login_pwd,
+        e.actual_name,
+        e.nick_name,
+        e.phone,
+        e.id_card,
+        e.birthday,
+        e.email,
+        e.status,
+        e.department_id,
+        e.work_unit_name,
+        e.is_leave,
+        e.is_valid,
+        e.update_time,
+        e.create_time,
+        e.approve_status,
+        e.sex,
+        e.logo_url,
+        e.user_type,
+        e.school_id
+    </sql>
+    <sql id="common_isValid">
+        and e.is_valid=1
+    </sql>
+
+    <select id="selectEmployeeAllList" resultMap="EmployeeDTO">
+        SELECT
+        <include refid="baseSql"></include>,
+        d.name AS department_name
+        FROM
+        t_base_user e
+        LEFT JOIN t_dept d ON d.id = e.department_id
+        <where>
+            e.is_valid=1 and d.is_valid=1
+            <if test="userQueryAo.phone != null and userQueryAo.phone != ''">
+                <bind name="likephone" value=" '%' + userQueryAo.phone +'%' "></bind>
+                AND e.phone like #{likephone}
+            </if>
+            <if test="userQueryAo.actualName != null and userQueryAo.actualName != ''">
+                <bind name="likeActualName" value=" '%' + userQueryAo.actualName +'%' "></bind>
+                AND e.actual_name like #{likeActualName}
+            </if>
+            <if test="userQueryAo.keyword != null and userQueryAo.keyword != ''">
+                <bind name="likeName" value=" '%' + userQueryAo.keyword +'%' "></bind>
+                AND (e.actual_name like #{likeName} or e.nick_name like #{likeName} or e.phone like #{likeName} or
+                e.login_name like #{likeName})
+            </if>
+
+            <if test="userQueryAo.departmentId != null">
+                AND e.department_id = #{userQueryAo.departmentId}
+            </if>
+            <if test="userQueryAo.deptName != null">
+                AND d.name = #{userQueryAo.deptName}
+            </if>
+            <if test="userQueryAo.approveStatus != null">
+                AND e.approve_status = #{userQueryAo.approveStatus}
+            </if>
+            <if test="userQueryAo.userIds != null and userQueryAo.userIds.size > 0">
+                AND e.id IN
+                <foreach collection="userQueryAo.userIds" open="(" close=")" item="item" separator=",">
+                    #{item}
+                </foreach>
+            </if>
+        </where>
+        order by e.create_time desc
+    </select>
+
+    <select id="selectEmployeeList" resultMap="EmployeeDTO">
+        SELECT
+        <include refid="baseSql"></include>,
+        d.name AS department_name,
+        s.school_name,
+        s.school_code
+        FROM
+        t_base_user e
+        LEFT JOIN t_dept d ON d.id = e.department_id
+        LEFT JOIN t_school_manage s ON e.school_id = s.id
+        where e.is_valid=1
+            <if test="userQueryAo.phone != null and userQueryAo.phone != ''">
+                <bind name="likephone" value=" '%' + userQueryAo.phone +'%' "></bind>
+                AND e.phone like #{likephone}
+            </if>
+            <if test="userQueryAo.keyword != null and userQueryAo.keyword != ''">
+                <bind name="likeName" value=" '%' + userQueryAo.keyword +'%' "></bind>
+                AND (e.actual_name like #{likeName} or e.nick_name like #{likeName} or e.phone like #{likeName} or
+                e.login_name like #{likeName})
+            </if>
+
+            <if test="userQueryAo.departmentId != null">
+                AND e.department_id = #{userQueryAo.departmentId}
+            </if>
+            <if test="userQueryAo.deptName != null">
+                AND d.name = #{userQueryAo.deptName}
+            </if>
+            <if test="userQueryAo.userType != null">
+                AND e.user_type = #{userQueryAo.userType}
+            </if>
+            <if test="userQueryAo.schoolId != null and userQueryAo.schoolId != 0">
+                AND e.school_id = #{userQueryAo.schoolId}
+            </if>
+            <if test="userQueryAo.approveStatus != null">
+                AND e.approve_status = #{userQueryAo.approveStatus}
+            </if>
+            <if test="userQueryAo.userIds != null and userQueryAo.userIds.size > 0">
+                AND e.id IN
+                <foreach collection="userQueryAo.userIds" open="(" close=")" item="item" separator=",">
+                    #{item}
+                </foreach>
+            </if>
+        order by e.id desc
+    </select>
+
+
+    <select id="userLoginMethod" resultMap="EmployeeDTO">
+        SELECT
+        <include refid="baseSql"></include>
+        FROM
+        t_base_user e
+        WHERE
+        e.login_name = #{loginName} and e.login_pwd = #{loginPwd}
+        <if test="schoolId != null and schoolId != 0">
+            AND e.school_id = #{schoolId}
+        </if>
+        <include refid="common_isValid"></include>
+        order by e.user_type asc
+    </select>
+
+    <!-- 查询家长账号 -->
+    <select id="getParentUserLoginByPhoneAndUser" resultType="com.sxkj.edu.module.system.employee.domain.dto.EmployeeDTO">
+        SELECT
+        <include refid="baseSql"></include>
+        FROM
+        t_base_user e
+        WHERE
+        e.actual_name = #{userName}
+        and e.phone = #{phone}
+        and e.school_id = #{schoolId}
+        <include refid="common_isValid"></include>
+        <if test="userType != null ">
+            AND e.user_type = #{userType}
+        </if>
+        order by e.user_type asc
+        limit 1
+    </select>
+
+
+    <select id="getByLoginName" resultMap="EmployeeDTO">
+        SELECT
+        <include refid="baseSql"></include>
+        FROM
+        t_base_user e
+        WHERE
+        e.login_name = #{loginName} and e.is_valid = #{isValid}
+        <include refid="common_isValid"></include>
+    </select>
+
+
+    <select id="getUserLoginByPhone" resultMap="EmployeeDTO">
+        SELECT
+        <include refid="baseSql"></include>
+        FROM
+        t_base_user e
+        WHERE
+        e.phone = #{phone} and e.is_valid = #{isValid}
+        <if test="schoolId != null and schoolId != 0">
+            AND e.school_id = #{schoolId}
+        </if>
+        <include refid="common_isValid"></include>
+    </select>
+
+
+    <select id="countByDepartmentId" resultType="integer">
+        SELECT
+        count(1)
+        FROM
+        t_base_user e
+        WHERE
+        e.department_id = #{depId}
+        <include refid="common_isValid"></include>
+        <if test="isValid != null">
+            AND e.is_valid = #{isValid}
+        </if>
+    </select>
+
+
+    <select id="getEmployeeIdByDeptId" resultMap="EmployeeVO">
+        SELECT
+        <include refid="baseSql"></include>
+        FROM
+        t_base_user e
+        WHERE
+        e.department_id = #{departmentId}
+        <include refid="common_isValid"></include>
+        order by e.create_time desc
+    </select>
+
+
+    <select id="getEmployeeIdByDeptIds" resultMap="EmployeeDTO">
+        SELECT
+        <include refid="baseSql"></include>
+        FROM
+        t_base_user e
+        WHERE
+        e.department_id IN
+        <foreach collection="departmentIds" item="item" open="(" close=")" separator=",">
+            #{item}
+        </foreach>
+        <include refid="common_isValid"></include>
+        order by e.create_time desc
+    </select>
+
+    <select id="getEmployeeByIds" resultMap="EmployeeDTO">
+        SELECT
+        <include refid="baseSql"></include>
+        FROM
+        t_base_user e
+        where e.id IN
+        <foreach collection="ids" item="item" open="(" close=")" separator=",">
+            #{item}
+        </foreach>
+        <include refid="common_isValid"></include>
+        order by e.create_time desc
+    </select>
+
+
+    <select id="getEmployeeById" resultMap="EmployeeDTO">
+        SELECT
+        <include refid="baseSql"></include>
+        FROM
+        t_base_user e
+        where e.id = #{id} and e.is_valid =1
+    </select>
+    <select id="selectByEmployee"
+            resultType="com.sxkj.edu.module.system.role.basic.domain.dto.RoleSelectedVO">
+        SELECT DISTINCT b.id,
+                        b.role_name roleName,
+                        b.STATUS    STATUS,
+                        b.CODE      CODE,
+                        b.role_type
+        FROM t_role_user a
+                 LEFT JOIN t_role b ON a.role_id = b.id
+        WHERE a.user_id = #{id}
+          AND b.is_valid = 1
+          AND a.is_valid = 1
+    </select>
+
+    <select id="selectByAllUserRole"
+            resultType="com.sxkj.edu.module.system.role.basic.domain.dto.RoleSelectedVO">
+        SELECT DISTINCT
+            b.id,
+            b.role_name roleName,
+            b.STATUS STATUS,
+            b.CODE CODE,
+            b.role_type,
+            u.user_type
+        FROM
+            t_role_user a
+                LEFT JOIN t_base_user u ON a.user_id = u.id
+                LEFT JOIN t_role b ON a.role_id = b.id
+        WHERE
+            u.login_name = #{loginName}
+          AND u.school_id = #{schoolId}
+          AND b.is_valid = 1
+          AND a.is_valid = 1
+          AND u.is_valid = 1
+            <if test="loginType != null and loginType == 'XCX'">
+                order by b.sort desc
+            </if>
+            <if test="loginType != null and loginType == 'JWPC'">
+                order by b.sort asc
+            </if>
+    </select>
+
+    <select id="selectByEmployeeByUserIdAndRoleId"
+            resultType="com.sxkj.edu.module.system.role.basic.domain.dto.RoleSelectedVO">
+        SELECT DISTINCT b.id,
+                        b.role_name roleName,
+                        b.STATUS    STATUS,
+                        b.CODE      CODE,
+                        b.role_type
+        FROM t_role_user a
+                 LEFT JOIN t_role b ON a.role_id = b.id
+        WHERE a.user_id = #{id}
+          and b.id = #{roleId}
+          AND b.is_valid = 1
+          AND a.is_valid = 1
+    </select>
+
+    <update id="updatePassword">
+        UPDATE t_base_user
+        SET login_pwd   = #{password},
+            update_time = now(),
+            update_user = #{updateId}
+        WHERE id = #{employeeId}
+    </update>
+
+
+    <select id="selectUserListByRole" resultType="com.sxkj.edu.module.system.employee.domain.entity.TBaseUserEntity">
+        SELECT
+        distinct u.id id,
+        u.login_name userAccount,
+        u.actual_name userName,
+        u.phone userPhone,
+        r.role_type userType
+        FROM
+        t_base_user u,
+        t_role_user a,
+        t_role r
+        WHERE
+        u.id = a.user_id and u.is_valid=1
+        AND a.role_id = r.id
+        <if test="roleCode != null and roleCode != ''">
+            and r.code like concat('%', #{roleCode}, '%')
+        </if>
+    </select>
+
+    <select id="queryUserPage"
+            resultType="com.sxkj.edu.module.system.employee.domain.entity.TBaseUserEntity">
+        select a.*
+        from t_base_user a
+        left join t_role_user b on a.id = b.user_id
+        where a.is_valid =1 and b.is_valid =1
+        <if test="roleId!=null">
+            and b.role_id=#{roleId}
+        </if>
+        <if test="userName!=null and userName!=''">
+            and a.actual_name like concat('%',#{userName},'%')
+        </if>
+    </select>
+</mapper>

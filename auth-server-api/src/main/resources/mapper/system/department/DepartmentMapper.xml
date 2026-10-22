@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.system.department.DepartmentDao">
+
+
+    <resultMap id="DepartmentVO"
+               type="com.sxkj.edu.module.system.department.domain.dto.DepartmentVO"></resultMap>
+
+
+    <sql id="baseSql">
+        d
+        .
+        id
+        ,
+        d.name,
+        d.code,
+        d.short_name,
+        d.manager_id,
+        d.parent_id,
+        d.sort,
+        d.update_time,
+        d.create_time,
+        d.create_user,
+        d.update_user,
+        d.description,
+        d.is_valid
+    </sql>
+
+    <select id="listAll" resultMap="DepartmentVO">
+        SELECT
+        <include refid="baseSql"></include>,
+        e.actual_name as managerName,
+        pd.`name` as parentName
+        FROM
+        t_dept d
+        left join t_base_user e on d.manager_id= e.id
+        left join t_dept pd on d.parent_id = pd.id
+        where d.is_valid=1
+        <if test="deptSearchAo.deptName != null and deptSearchAo.deptName != ''">
+            AND d.name like #{deptSearchAo.deptName}
+        </if>
+        <if test="deptSearchAo.deptId != null and deptSearchAo.deptId != ''">
+            AND d.id = #{deptSearchAo.deptId}
+        </if>
+        order by d.sort asc
+    </select>
+
+    <!--    <select id="selectByParentId" resultMap="com.sxkj.edu.module.system.department.domain.dto.DepartmentVO">-->
+    <!--        SELECT-->
+    <!--        <include refid="baseSql"></include>-->
+    <!--        FROM-->
+    <!--        t_dept d-->
+    <!--        where-->
+    <!--        d.parent_id = #{departmentId}-->
+    <!--        order by sort desc-->
+    <!--    </select>-->
+
+
+    <select id="countSubDepartment" resultType="java.lang.Integer">
+        SELECT count(distinct name)
+        FROM t_dept
+        WHERE parent_id = #{deptId}
+          and is_valid = 1
+    </select>
+    <select id="listAllDistinct" resultType="com.sxkj.edu.module.system.department.domain.dto.DepartmentVO">
+        SELECT
+        <include refid="baseSql"></include>,
+            e.actual_name as managerName,
+            pd.`name` as parentName
+        FROM
+            t_dept d
+                left join t_base_user e on d.manager_id= e.id
+                left join t_dept pd on d.parent_id = pd.id
+        where d.is_valid=1
+        <if test="name != null and name != ''">
+            AND d.name like concat('%',#{name},'%')
+        </if>
+        GROUP BY d.`name`
+    </select>
+
+
+</mapper>

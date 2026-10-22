@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.system.role.roleprivilege.RolePrivilegeDao">
+
+    <resultMap id="RolePrivilegeEntity"
+               type="com.sxkj.edu.module.system.role.roleprivilege.domain.entity.RolePrivilegeEntity"></resultMap>
+
+    <resultMap id="UserMenuEntity"
+               type="com.sxkj.edu.module.system.privilege.domain.entity.UserMenuEntity"></resultMap>
+
+    <sql id="baseSql">
+        rp.id,
+        rp.role_id,
+        rp.privilege_key,
+        rp.update_time,
+        rp.create_time,
+        rp.is_valid
+    </sql>
+    <sql id="common_isValid">
+        and p.is_valid=1
+    </sql>
+
+
+    <select id="listByRoleIds" resultMap="UserMenuEntity">
+        SELECT DISTINCT p.*
+        FROM
+        t_privilege_info p
+        left JOIN t_role_privilege rp on p.key = rp.privilege_key
+        WHERE rp.is_valid =1 and
+        rp.role_id IN
+        <foreach collection="roleIds" item="item" open="(" close=")" separator=",">
+            #{item}
+        </foreach>
+        <include refid="common_isValid"></include>
+        order by p.create_time desc
+    </select>
+
+
+
+    <select id="listByMenuGnTypeRoleId" resultMap="UserMenuEntity">
+        SELECT p.*
+        FROM
+        t_privilege_info p
+        left JOIN t_role_privilege rp on p.key = rp.privilege_key
+        WHERE rp.is_valid =1 and
+        rp.role_id = #{roleId}
+        and p.is_valid =1
+        order by p.sort asc
+    </select>
+
+    <select id="listByMenuGnTypeRoleIdForPc" resultMap="UserMenuEntity">
+        SELECT p.*
+        FROM
+            t_privilege_info p
+                left JOIN t_role_privilege rp on p.key = rp.privilege_key
+        WHERE rp.is_valid =1 and
+            rp.role_id = #{roleId}
+          and p.is_valid =1
+          and p.menu_source='JWPC'
+        order by p.sort asc
+    </select>
+
+    <select id="queryUserMenuListByUserId" resultType="java.lang.String">
+        SELECT distinct t.privilege_key
+        FROM t_role_user r,
+             t_role_privilege t,
+             t_base_user u
+        WHERE r.user_id = u.id
+          AND r.role_id = t.role_id
+          AND u.id = #{userId}
+          and u.is_valid = 1
+          and t.is_valid = 1
+          and r.is_valid = 1
+    </select>
+
+</mapper>

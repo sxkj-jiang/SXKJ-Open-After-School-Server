@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.afterschool.mapper.AsContentAdviceMapper">
+
+    <select id="pageContentAdviceList" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsContentAdviceVO">
+        SELECT
+            ca.id,
+            ca.source_type,
+            ca.advice_name,
+            ca.school_id,
+            ca.user_id,
+            ca.category_id,
+            ca.author,
+            ca.mobile,
+            ca.update_user AS authorUpdate,
+            ca.file_url,
+            ca.status,
+            ca.check_content,
+            ca.create_time,
+            ca.update_time,
+            ca.audit_remark,
+            ca.update_user AS authorUpdate,
+            u.actual_name AS createUser,
+            sm.school_name AS schoolName,
+            di.type_name AS categoryName,
+            CASE ca.source_type
+                WHEN 1 THEN '教师端'
+                WHEN 2 THEN '家长端'
+                WHEN 3 THEN '班主任'
+                ELSE '未知'
+            END AS sourceTypeDesc,
+            CASE ca.status
+                WHEN 0 THEN '未处理'
+                WHEN 1 THEN '已处理'
+                ELSE '未知'
+            END AS statusDesc
+        FROM
+            t_content_advice ca
+        LEFT JOIN t_base_user u ON ca.create_user = u.id
+        LEFT JOIN t_school_manage sm ON ca.school_id = sm.id
+        LEFT JOIN t_base_dict_item di ON ca.category_id = di.id AND di.is_valid = 1
+        <where>
+            ca.is_valid = 1
+            <if test="query.schoolId != null">
+                AND ca.school_id = #{query.schoolId}
+            </if>
+            <if test="query.sourceType != null">
+                AND ca.source_type = #{query.sourceType}
+            </if>
+            <if test="query.adviceName != null and query.adviceName != ''">
+                AND ca.advice_name LIKE concat('%', #{query.adviceName}, '%')
+            </if>
+            <if test="query.categoryId != null">
+                AND ca.category_id = #{query.categoryId}
+            </if>
+            <if test="query.author != null and query.author != ''">
+                AND ca.author LIKE concat('%', #{query.author}, '%')
+            </if>
+            <if test="query.status != null">
+                AND ca.status = #{query.status}
+            </if>
+        </where>
+        ORDER BY ca.create_time DESC
+    </select>
+
+    <select id="selectContentAdviceDetail" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsContentAdviceVO">
+        SELECT
+            ca.id,
+            ca.source_type,
+            ca.advice_name,
+            ca.school_id,
+            ca.user_id,
+            ca.category_id,
+            ca.author,
+            ca.mobile,
+            ca.file_url,
+            ca.status,
+            ca.check_content,
+            ca.create_time,
+            ca.create_user,
+            ca.update_user AS authorUpdate,
+            ca.update_time,
+            ca.audit_remark,
+            sm.school_name AS schoolName,
+            di.type_name AS categoryName,
+            CASE ca.source_type
+                WHEN 1 THEN '教师端'
+                WHEN 2 THEN '家长端'
+                WHEN 3 THEN '班主任'
+                ELSE '未知'
+            END AS sourceTypeDesc,
+            CASE ca.status
+                WHEN 0 THEN '未处理'
+                WHEN 1 THEN '已处理'
+                ELSE '未知'
+            END AS statusDesc
+        FROM
+            t_content_advice ca
+        LEFT JOIN t_school_manage sm ON ca.school_id = sm.id
+        LEFT JOIN t_base_dict_item di ON ca.category_id = di.id AND di.is_valid = 1
+        WHERE ca.id = #{id} AND ca.is_valid = 1
+    </select>
+
+</mapper>

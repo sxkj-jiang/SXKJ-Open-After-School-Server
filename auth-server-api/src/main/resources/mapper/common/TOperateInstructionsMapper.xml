@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.sxkj.edu.module.mapper.sys.OperateInstructionsMapper">
+
+    <select id="queryOperateInstructionPage" resultType="com.sxkj.edu.domain.base.webShow.OperateInstructionVO">
+        SELECT
+            id,
+            belong_plate belongPlate,
+            role_type roleType,
+            menu_name menuName,
+            update_time updateTime,
+            publish_status  publishStatus
+        FROM
+            t_operate_instructions
+        where is_valid = 1
+        <if test="query.menuCode != null and query.menuCode != ''">
+            AND menu_code = #{query.menuCode}
+        </if>
+        <if test="query.roleType != null">
+            AND role_type = #{query.roleType}
+        </if>
+        <if test="query.startTime != null and query.endTime != null">
+            AND update_time &gt;= #{query.startTime}
+            AND update_time &lt;= #{query.endTime}
+        </if>
+        order by update_time desc
+    </select>
+</mapper>

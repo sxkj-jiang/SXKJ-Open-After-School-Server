@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.mapper.base.BaseExamRecordMapper">
+    <select id="getIdsByExam" resultType="java.lang.Long">
+        SELECT
+	        origin_id
+        FROM
+	        t_base_examine_record
+        WHERE
+            id IN (
+                SELECT
+                    max(id) AS mid
+                FROM
+                    t_base_examine_record
+                WHERE
+                    exam_type = #{code}
+                GROUP BY
+                    origin_id
+            )
+        AND exam_status = #{examStatus}
+    </select>
+</mapper>

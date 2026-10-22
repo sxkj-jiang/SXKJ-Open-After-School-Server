@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.afterschool.mapper.AsServiceMapper">
+
+    <!-- 锁定课后服务 -->
+    <select id="selectByIdForUpdate"
+            resultType="com.sxkj.edu.module.afterschool.domain.entity.AsServiceEntity">
+        SELECT *
+        FROM t_as_service
+        WHERE id = #{id}
+        FOR UPDATE
+    </select>
+
+    <select id="queryCourseSchedulePage"
+            resultType="com.sxkj.edu.module.afterschool.domain.vo.CourseSchedulePageVO">
+        SELECT
+            t.id,
+            t.service_name AS serviceName,
+            et.id AS termId,
+            et.term_name AS termName,
+            et.start_date AS startDate,
+            et.end_date AS endDate
+        FROM t_as_service t
+        left join t_educl_term et on t.term_id = et.id
+        where t.is_valid = 1 and et.is_valid = 1
+        <if test="query.schoolId != null">
+            and t.school_id = #{query.schoolId}
+        </if>
+        <if test="query.serviceName != null and query.serviceName != ''">
+           and t.service_name like CONCAT('%', #{query.serviceName}, '%')
+        </if>
+        <if test="query.termId != null">
+          and t.term_id = #{query.termId}
+        </if>
+        <if test="query.termName != null and query.termName != ''">
+          and  et.term_name like CONCAT('%', #{query.termName}, '%')
+        </if>
+        order by t.create_time desc
+    </select>
+
+    <!-- 课表管理-查询服务下所有有效课次数据 -->
+    <select id="queryCourseSessionList"
+            resultType="com.sxkj.edu.module.afterschool.domain.dto.CourseScheduleListDTO">
+        SELECT
+            cs.id AS sessionId,
+            cc.id AS courseClassId,
+            cc.course_class_name AS courseClassName,
+            t.teacher_name AS teacherName,
+            cs.week_day AS weekDay,
+            cs.start_time AS startTime,
+            cs.end_time AS endTime,
+            sp.section_no AS sectionNo,
+            sp.section_name AS sectionName,
+            cc.applicable_class_ids AS applicableClassIds,
+            cc.applicable_grade_ids AS applicableGradeIds,
+            cc.enroll_type AS enrollType
+        FROM t_as_service s
+            INNER JOIN t_as_course_class cc ON cc.service_id = s.id AND cc.is_valid = 1
+            INNER JOIN t_as_course_session cs ON cs.course_class_id = cc.id AND cs.is_valid = 1
+            left join t_as_schedule_period sp ON cs.schedule_period_id = sp.id and sp.is_valid = 1
+            LEFT JOIN t_as_teacher t ON t.id = cc.teacher_id AND t.is_valid = 1
+        WHERE s.is_valid = 1 AND s.id = #{serviceId}
+            AND cs.session_status != 3 AND cc.class_status in (1,2)
+        GROUP BY cs.course_class_id, cs.week_day, cs.schedule_period_id
+        ORDER BY cs.week_day ASC, sp.section_no ASC, cs.start_time ASC
+    </select>
+
+    <!-- 根据学校和学期查询该学期下所有有效课程班ID -->
+    <select id="queryCourseClassIdsByTerm" resultType="com.sxkj.edu.module.afterschool.domain.entity.AsCourseClassEntity">
+        SELECT DISTINCT cc.*
+        FROM t_as_service s
+        INNER JOIN t_as_course_class cc ON cc.service_id = s.id AND cc.is_valid = 1
+        WHERE s.is_valid = 1
+          AND s.school_id = #{schoolId}
+        <if test="termId != null and termId != 0">
+            and s.term_id = #{termId}
+        </if>
+    </select>
+</mapper>

@@ -1,0 +1,24 @@
+package ${basePackage}.module.${modulePackage}.domain.dto;
+
+import io.swagger.annotations.ApiModelProperty;
+import javax.validation.constraints.NotNull;
+import lombok.Data;
+
+/**
+ * 更新 [ ${tableDesc} ]
+ *
+ * @author ${author}
+ * @version 1.0
+ * @company ${company}
+ * @copyright (c) 2018 ${company}Inc. All rights reserved.
+ * @date  ${date}
+ * @since JDK1.8
+ */
+@Data
+public class ${moduleClass}UpdateDTO extends ${moduleClass}AddDTO {
+
+    @ApiModelProperty(value = "id不能为空", required = true)
+    @NotNull(message = "id不能为空")
+    private Long id;
+
+}

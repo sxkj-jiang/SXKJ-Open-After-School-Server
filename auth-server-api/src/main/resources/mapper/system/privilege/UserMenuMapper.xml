@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.system.privilege.dao.UserMenuDao">
+
+    <resultMap id="UserMenuEntity"
+               type="com.sxkj.edu.module.system.privilege.domain.entity.UserMenuEntity"></resultMap>
+
+    <sql id="baseSql">
+        p.id,
+        p.type,
+        p.name,
+        p.key,
+        p.url,
+        p.sort,
+        p.icon,
+        p.is_show,
+        p.parent_key,
+        p.is_valid,
+        p.menu_source,
+        p.create_time,
+        p.meta_order,
+        p.meta_active_path,
+        p.meta_title,
+        p.component,
+        p.hide_in_menu,
+        p.redirect
+    </sql>
+
+    <sql id="common_isValid">
+        and is_valid=1
+    </sql>
+
+
+    <!-- 返回系统菜单并且不包含开发菜单-->
+    <select id="selectMenuByType" resultMap="UserMenuEntity">
+        SELECT
+        <include refid="baseSql"></include>
+        FROM
+        t_privilege_info p
+        WHERE p.is_valid =1
+        and p.type = #{query.type}
+        <if test="query.isTrue != null and query.isTrue != 1">
+            and p.parent_key is not null
+        </if>
+        <if test="query.menuParentKey != null and query.menuParentKey != ''">
+            and p.parent_key = #{query.menuParentKey}
+        </if>
+        <if test="query.isShow != null ">
+            and p.is_show = #{query.isShow}
+        </if>
+        <if test="query.menuKeyList != null and query.menuKeyList.size > 0">
+            AND p.key IN
+            <foreach collection="query.menuKeyList" open="(" close=")" item="item" separator=",">
+                #{item}
+            </foreach>
+        </if>
+        <if test="query.menuSource != null and query.menuSource != ''">
+            and p.menu_source = #{query.menuSource}
+        </if>
+        and p.parent_key != 'Support'
+        <include refid="common_isValid"></include>
+    </select>
+
+    <select id="selectAllMenuByType" resultMap="UserMenuEntity">
+        SELECT
+        <include refid="baseSql"></include>
+        FROM
+        t_privilege_info p
+        WHERE p.is_valid =1
+        and p.type = #{query.type}
+        <if test="query.isTrue != null and query.isTrue != 1">
+            and p.parent_key is not null
+        </if>
+        <if test="query.menuParentKey != null and query.menuParentKey != ''">
+            and p.parent_key = #{query.menuParentKey}
+        </if>
+        <if test="query.isShow != null ">
+            and p.is_show = #{query.isShow}
+        </if>
+        <if test="query.menuKeyList != null and query.menuKeyList.size > 0">
+            AND p.key IN
+            <foreach collection="query.menuKeyList" open="(" close=")" item="item" separator=",">
+                #{item}
+            </foreach>
+        </if>
+        <if test="query.menuSource != null and query.menuSource != ''">
+            and p.menu_source = #{query.menuSource}
+        </if>
+        <include refid="common_isValid"></include>
+    </select>
+
+    <select id="selectIsValidAll" resultMap="UserMenuEntity">
+        SELECT
+        <include refid="baseSql"></include>,
+        parent.id as parent_id
+        FROM
+        t_privilege_info p
+        LEFT JOIN t_privilege_info parent ON p.parent_key = parent.`key`
+        where p.is_valid = 1 and parent.is_valid = 1
+        and p.is_show =1
+        and p.parent_key != 'Support'
+    </select>
+
+    <select id="selectAll" resultMap="UserMenuEntity">
+        SELECT
+        <include refid="baseSql"></include>,
+        parent.id as parent_id
+        FROM
+        t_privilege_info p
+        LEFT JOIN t_privilege_info parent ON p.parent_key = parent.`key`
+        where p.is_valid = 1
+
+    </select>
+
+
+</mapper>

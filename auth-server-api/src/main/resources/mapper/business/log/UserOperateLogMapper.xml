@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.business.dao.UserOperateLogDao">
+
+    <resultMap id="UserOperateLogEntity" type="com.sxkj.edu.domain.sys.entity.UserOperateLogEntity"></resultMap>
+
+
+    <select id="queryByPage" resultMap="UserOperateLogEntity">
+        select
+        id,
+        user_id,
+        user_name,
+        module,
+        content,
+        url,
+        method,
+        param,
+        result,
+        fail_reason,
+        update_time,
+        create_time
+        from t_user_operate_log
+        <where>
+            <if test="queryDTO.startDate != null and queryDTO.startDate != ''">
+                AND DATE_FORMAT(create_time, '%Y-%m-%d') &gt;= #{queryDTO.startDate}
+            </if>
+            <if test="queryDTO.endDate != null and queryDTO.endDate != ''">
+                AND DATE_FORMAT(create_time, '%Y-%m-%d') &lt;= #{queryDTO.endDate}
+            </if>
+            <if test="queryDTO.userName != null and queryDTO.userName != ''">
+                AND INSTR(user_name,#{queryDTO.userName})
+            </if>
+            <if test="queryDTO.resultFlag != null">
+                AND result = #{queryDTO.resultFlag}
+            </if>
+        </where>
+        order by create_time desc
+    </select>
+
+    <select id="queryPlateOperateFrequencyList"
+            resultType="com.sxkj.edu.domain.vo.PlateOperateFrequencyStatisticsVo">
+        SELECT
+        page_code,
+        model menuName,
+        count(id) menuVisitCount
+        FROM
+        up_statistics_pv
+        where id is not null
+        <if test="query.useFrequencyPlateType != null and query.useFrequencyPlateType != ''">
+            AND type = #{query.useFrequencyPlateType}
+        </if>
+        <if test="query.useFrequencyTimeType != null and query.useFrequencyTimeType == 1">
+            AND DATE(create_time) = CURDATE()
+        </if>
+        <if test="query.useFrequencyTimeType != null and query.useFrequencyTimeType == 2">
+            AND YEARWEEK(create_time, 1) = YEARWEEK(CURDATE(), 1)
+        </if>
+        <if test="query.useFrequencyTimeType != null and query.useFrequencyTimeType == 3">
+            AND YEAR(create_time) = YEAR(CURDATE())
+            AND MONTH(create_time) = MONTH(CURDATE())
+        </if>
+        <if test="query.useFrequencyStartDate != null and query.useFrequencyEndDate != null">
+            AND DATE(create_time) BETWEEN #{query.useFrequencyStartDate} AND #{query.useFrequencyEndDate}
+        </if>
+        GROUP BY model
+        order by menuVisitCount desc limit 50
+    </select>
+
+    <select id="queryPlateNuserLoginStatistics"
+            resultType="com.sxkj.edu.domain.vo.PlateNuserLoginStatisticsVo">
+        SELECT
+        type accessTerminal,
+        DATE(create_time) date,
+        count(DISTINCT id)  count
+        FROM
+        up_statistics_pv
+        where  model like '%首页%'
+        <if test="query.nUserLoginType != null and query.nUserLoginType != ''">
+            AND type = #{query.nUserLoginType}
+        </if>
+        <if test="query.nUserLoginStartDate != null and query.nUserLoginEndDate != null">
+            AND create_time &gt;= #{query.nUserLoginStartDate}
+            AND create_time &lt;= #{query.nUserLoginEndDate}
+        </if>
+        GROUP BY date,accessTerminal
+    </select>
+
+    <select id="queryPlateUserLoginStatistics"
+            resultType="com.sxkj.edu.domain.vo.StatisticTypeCountVO">
+        SELECT
+        access_terminal type,
+        DATE_FORMAT(create_time, '%m-%d') date,
+        count(DISTINCT user_id)  count
+        FROM
+        t_user_login_log
+        where login_status = 1  and login_type = 1
+        <if test="query.userLoginPlateType != null and query.userLoginPlateType != ''">
+            AND access_terminal = #{query.userLoginPlateType}
+        </if>
+        <if test="query.userLoginStartDate == null and query.userLoginEndDate == null">
+            and create_time &gt;= DATE_SUB(CURDATE(), INTERVAL 14 DAY)
+            AND create_time &lt;= CONCAT(CURDATE(), ' 23:59:59')
+        </if>
+        <if test="query.userLoginStartDate != null and query.userLoginEndDate != null">
+            AND DATE(create_time) between #{query.userLoginStartDate} AND #{query.userLoginEndDate}
+        </if>
+        GROUP BY DATE(create_time),access_terminal
+    </select>
+
+    <select id="getPlateOperateTime"
+            resultType="com.sxkj.edu.domain.vo.StatisticKeyWordCountVO">
+        select
+        t.date keyword,
+        SUM(t.timeDiff) count
+        from
+        (SELECT
+        DATE(ol.create_time) date,
+        TIMESTAMPDIFF(HOUR,
+        MIN(ol.create_time),
+        MAX(ol.create_time)
+        ) as timeDiff
+        FROM
+        t_user_operate_log ol
+        LEFT JOIN t_base_user u on u.id = ol.user_id
+        LEFT JOIN t_role_user ru on u.id = ru.user_id
+        LEFT JOIN t_role r on r.id = ru.role_id
+        where r.id = #{query.usePlateUserType} and ol.module not like concat('%','登录','%')
+        <if test="query.usePlateTimeType != null and query.usePlateTimeType == 1">
+            AND DATE(ol.create_time) = CURDATE()
+        </if>
+        <if test="query.usePlateTimeType != null and query.usePlateTimeType == 2">
+            and YEARWEEK(ol.create_time, 1) = YEARWEEK(CURDATE(), 1)
+        </if>
+        <if test="query.usePlateTimeType != null and query.usePlateTimeType == 3">
+            AND YEAR(ol.create_time) = YEAR(CURDATE())
+            AND MONTH(ol.create_time) = MONTH(CURDATE())
+        </if>
+        <if test="query.usePlateStartDate != null and query.usePlateEndDate != null">
+            AND DATE(ol.create_time) BETWEEN #{query.usePlateStartDate} AND#{query.usePlateEndDate}
+        </if>
+        GROUP BY
+        DATE(ol.create_time),u.id,ol.access_terminal
+        ) t
+        GROUP BY t.DATE
+        ORDER BY t.date
+    </select>
+
+
+</mapper>

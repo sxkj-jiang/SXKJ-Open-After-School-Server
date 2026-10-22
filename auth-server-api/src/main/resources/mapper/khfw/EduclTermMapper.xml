@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.afterschool.mapper.EduclTermMapper">
+
+    <!-- 锁定目标学期 -->
+    <select id="selectByIdForUpdate" resultType="com.sxkj.edu.module.afterschool.domain.entity.EduclTermEntity">
+        SELECT *
+        FROM t_educl_term
+        WHERE id = #{id}
+        FOR UPDATE
+    </select>
+
+    <!-- 学期分页关联查询 -->
+    <select id="pageList" resultType="com.sxkj.edu.module.afterschool.domain.vo.EduclTermVO">
+        SELECT
+            t.id,
+            t.school_id,
+            s.school_name,
+            t.term_name,
+            t.term_code,
+            t.school_year,
+            t.total_weeks,
+            t.term_type,
+            t.start_date,
+            t.end_date,
+            u.actual_name AS createUser,
+            t.create_time,
+            t.term_status
+        FROM
+            t_educl_term t
+            LEFT JOIN t_school_manage s ON s.id = t.school_id
+            LEFT JOIN t_base_user u ON u.id = t.create_user
+        <where>
+            t.is_valid = 1
+            <if test="query.schoolId != null">
+                AND t.school_id = #{query.schoolId}
+            </if>
+            <if test="query.termName != null and query.termName != ''">
+                AND t.term_name LIKE CONCAT('%', #{query.termName}, '%')
+            </if>
+            <if test="query.termType != null">
+                AND t.term_type = #{query.termType}
+            </if>
+            <if test="query.isAll != null and query.isAll == false">
+                AND t.end_date &gt;= CURRENT_DATE()
+            </if>
+            <if test="query.isHistory != null and query.isHistory == true">
+                AND t.start_date &lt;= CURRENT_DATE()
+            </if>
+        </where>
+        ORDER BY t.start_date DESC, t.id DESC
+    </select>
+
+    <!-- 学期详情关联查询 -->
+    <select id="selectDetail" resultType="com.sxkj.edu.module.afterschool.domain.vo.EduclTermVO">
+        SELECT
+            t.id,
+            t.school_id,
+            s.school_name,
+            t.term_name,
+            t.term_code,
+            t.school_year,
+            t.term_type,
+            t.start_date,
+            t.end_date,
+            t.total_weeks,
+            t.term_status,
+            t.create_time,
+            t.update_time,
+            t.term_status
+        FROM
+            t_educl_term t
+            LEFT JOIN t_school_manage s ON s.id = t.school_id
+        WHERE t.id = #{id} AND t.is_valid = 1
+    </select>
+
+</mapper>

@@ -17,47 +17,47 @@
 
 管理端
 
-![img_2.png](img_2.png)
+![img_21.png](img_21.png)
 
-![img_3.png](img_3.png)
+![img_22.png](img_22.png)
 
-![img_4.png](img_4.png)
+![img_23.png](img_23.png)
 
-![img_5.png](img_5.png)
+![img_24.png](img_24.png)
 
-![img_6.png](img_6.png)
+![img_25.png](img_25.png)
+
+![img_26.png](img_26.png)
 
 
 
 移动端
 
-![img_7.png](img_7.png)
+![img_27.png](img_27.png)
 
-![img_9.png](img_9.png)
+![img_28.png](img_28.png)
 
-![img_10.png](img_10.png)
+![img_37.png](img_37.png)
 
-![img_11.png](img_11.png)
+![img_29.png](img_29.png)
 
-![img_12.png](img_12.png)
+![img_30.png](img_30.png)
 
-![img_13.png](img_13.png)
+![img_31.png](img_31.png)
 
-![img_14.png](img_14.png)
+![img_32.png](img_32.png)
 
-![img_15.png](img_15.png)
+![img_33.png](img_33.png)
 
-![img_16.png](img_16.png)
+![img_34.png](img_34.png)
 
-![img_17.png](img_17.png)
+![img_35.png](img_35.png)
 
-![img_18.png](img_18.png)
-
+![img_36.png](img_36.png)
 
 身份切换
 
-![img_8.png](img_8.png)
-
+![img_39.png](img_39.png)
 
 
 # 二、软件架构
@@ -214,11 +214,11 @@ fdfs:
 
 <font style="color:rgb(64, 72, 91);">扫码添加小冉官方客服微信，邀您加入千人微信交流群：</font>
 
-<img src="https://cdn.nlark.com/yuque/0/2026/png/72221313/1792493331171-df707a6f-61ca-469d-a1d6-0af1c53c7e80.png" width="177" alt="" title="" crop="0,0,1,1" id="u1036fedb" class="ne-image">
+![img_40.png](img_40.png)
 
 <font style="color:rgb(64, 72, 91);">扫码关注知冉云公众号，了解平台更多一手资讯。</font>
 
-<img src="https://cdn.nlark.com/yuque/0/2026/png/72221313/1791531894917-4a0510d6-b5c9-492b-99e1-6c2ee2dbfeef.png" width="172" alt="" title="" crop="0,0,1,1" id="LoAMX" class="ne-image">
+![img_41.png](img_41.png)
 
 <font style="color:rgb(64, 72, 91);"> </font>
 

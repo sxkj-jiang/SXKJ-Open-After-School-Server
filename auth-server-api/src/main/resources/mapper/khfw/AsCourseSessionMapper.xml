@@ -1,0 +1,446 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.afterschool.mapper.AsCourseSessionMapper">
+
+    <!-- 查询学生的课表数据 -->
+    <select id="queryStudentSchedule" parameterType="com.sxkj.edu.module.afterschool.domain.ao.AsStudentScheduleQueryAO"
+            resultType="com.sxkj.edu.module.afterschool.domain.vo.AsStudentScheduleItemVO">
+        SELECT
+            term.id AS termId,
+            term.term_name AS termName,
+            cc.id AS courseClassId,
+            sd.id AS sessionId,
+            sd.teacher_id AS teacherId,
+            sd.session_date AS sessionDate,
+            sd.week_day AS weekDay,
+            sd.start_time AS startTime,
+            sd.end_time AS endTime,
+            sd.place_name AS placeName,
+            cc.course_class_name AS courseClassName
+        FROM
+            t_as_student_destination dest
+        INNER JOIN t_as_course_session sd ON dest.session_id = sd.id
+        INNER JOIN t_as_course_class cc ON sd.course_class_id = cc.id
+        INNER JOIN t_as_service svc ON cc.service_id = svc.id AND svc.is_valid = 1
+        INNER JOIN t_educl_term term ON svc.term_id = term.id AND term.is_valid = 1
+        INNER JOIN t_as_student stu ON dest.student_id = stu.id AND stu.is_valid = 1 AND stu.term_id = svc.term_id
+        INNER JOIN t_as_enrollment ae ON sd.id = ae.session_id and dest.student_id = ae.student_id and ae.is_valid = 1
+        <where>
+            dest.is_valid = 1
+            AND sd.is_valid = 1
+            AND cc.is_valid = 1
+            and ae.enroll_status in(1,3)
+            AND dest.destination_type = 1
+            <if test="query.schoolId != null">
+                AND dest.school_id = #{query.schoolId}
+            </if>
+            <if test="query.studentId != null">
+                AND dest.student_id = #{query.studentId}
+            </if>
+            <if test="query.termId != null">
+                AND svc.term_id = #{query.termId}
+            </if>
+            <if test="query.queryType != null and query.queryType == 1">
+                <!-- 周查询：查询该周的周一到周日 -->
+                AND sd.session_date BETWEEN #{weekStartDate} AND #{weekEndDate}
+            </if>
+            <if test="query.queryType != null and query.queryType == 2">
+                <!-- 月查询：查询该月的所有数据 -->
+                AND sd.session_date BETWEEN #{monthStartDate} AND #{monthEndDate}
+            </if>
+            <if test="query.queryType != null and query.queryType == 3">
+                <!-- 天查询：查询指定日期的数据 -->
+                AND sd.session_date = #{dayDate}
+            </if>
+        </where>
+        ORDER BY
+            sd.session_date ASC,
+            sd.start_time ASC
+    </select>
+
+    <!-- 查询教师的课表数据 -->
+    <select id="queryTeacherSchedule" parameterType="com.sxkj.edu.module.afterschool.domain.ao.AsTeacherScheduleQueryAO"
+            resultType="com.sxkj.edu.module.afterschool.domain.vo.AsStudentScheduleItemVO">
+        SELECT
+            cc.id AS courseClassId,
+            sd.id AS sessionId,
+            sd.teacher_id AS teacherId,
+            sd.session_date AS sessionDate,
+            sd.week_day AS weekDay,
+            sd.start_time AS startTime,
+            sd.end_time AS endTime,
+            sd.place_name AS placeName,
+            cc.course_class_name AS courseClassName
+        FROM
+            t_as_course_session sd
+        INNER JOIN t_as_course_class cc ON sd.course_class_id = cc.id
+        <where>
+            sd.is_valid = 1
+            AND cc.is_valid = 1
+            <if test="query.schoolId != null">
+                AND sd.school_id = #{query.schoolId}
+            </if>
+            <if test="query.teacherId != null">
+                AND sd.teacher_id = #{query.teacherId}
+            </if>
+            <if test="query.queryType != null and query.queryType == 1">
+                <!-- 周查询：查询该周的周一到周日 -->
+                AND sd.session_date BETWEEN #{weekStartDate} AND #{weekEndDate}
+            </if>
+            <if test="query.queryType != null and query.queryType == 2">
+                <!-- 月查询：查询该月的所有数据 -->
+                AND sd.session_date BETWEEN #{monthStartDate} AND #{monthEndDate}
+            </if>
+            <if test="query.queryType != null and query.queryType == 3">
+                <!-- 天查询：查询指定日期的数据 -->
+                AND sd.session_date = #{dayDate}
+            </if>
+        </where>
+        ORDER BY
+            sd.session_date ASC,
+            sd.start_time ASC
+    </select>
+
+    <!-- 分页查询教师今日课程 -->
+    <select id="pageTeacherTodayCourse" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsTeacherTodayCourseVO">
+        SELECT
+            term.id AS termId,
+            term.term_name AS termName,
+            sd.id AS sessionId,
+            sd.start_time AS startTime,
+            sd.end_time AS endTime,
+            cc.course_class_name AS courseClassName,
+            (SELECT g.grade_name 
+             FROM t_as_enrollment enr
+             INNER JOIN t_as_student stu ON enr.student_id = stu.id
+             LEFT JOIN t_educl_grade g ON stu.grade_id = g.id and g.is_valid = 1
+             WHERE enr.course_class_id = cc.id 
+             AND enr.is_valid = 1 
+             AND stu.is_valid = 1 
+             AND stu.grade_id IS NOT NULL
+             LIMIT 1) AS gradeName,
+            sd.place_name AS placeName,
+            sd.session_date AS sessionDate
+        FROM
+            t_as_course_session sd
+        INNER JOIN t_as_course_class cc ON sd.course_class_id = cc.id
+        INNER JOIN t_as_service svc ON cc.service_id = svc.id AND svc.is_valid = 1
+        INNER JOIN t_educl_term term ON svc.term_id = term.id AND term.is_valid = 1
+        <where>
+            sd.is_valid = 1
+            AND cc.is_valid = 1
+            AND sd.school_id = #{query.schoolId}
+            AND sd.teacher_id = #{teacherId}
+            AND svc.term_id = #{query.termId}
+            AND DATE_FORMAT(sd.session_date, '%Y-%m-%d') = #{today}
+            AND sd.session_status IN (0, 1, 2)
+        </where>
+        ORDER BY
+            sd.start_time ASC
+    </select>
+
+    <!-- 查询教师今日课程详情 -->
+    <select id="getTeacherTodayCourseDetail" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsTeacherTodayCourseDetailVO">
+        SELECT
+            term.id AS termId,
+            term.term_name AS termName,
+            sd.id AS sessionId,
+            sd.start_time AS startTime,
+            sd.end_time AS endTime,
+            sd.course_class_id AS courseClassId,
+            cc.course_class_name AS courseClassName,
+            (SELECT g.grade_name 
+             FROM t_as_enrollment enr
+             INNER JOIN t_as_student stu ON enr.student_id = stu.id
+             LEFT JOIN t_educl_grade g ON stu.grade_id = g.id and g.is_valid = 1
+             WHERE enr.course_class_id = cc.id 
+             AND enr.is_valid = 1 
+             AND stu.is_valid = 1 
+             AND stu.grade_id IS NOT NULL
+             LIMIT 1) AS gradeName,
+            sd.place_name AS placeName,
+            sd.session_date AS sessionDate,
+            sd.teacher_id AS teacherId,
+            t.teacher_name AS teacherName,
+            cc.intro AS intro,
+            cc.enroll_type AS enrollType,
+            CASE cc.enroll_type
+                WHEN 1 THEN '公开报名'
+                WHEN 2 THEN '邀请报名'
+                WHEN 3 THEN '行政班安排'
+            END AS enrollTypeName,
+            cat.category_name AS categoryName
+            FROM
+                t_as_course_session sd
+            INNER JOIN t_as_course_class cc ON sd.course_class_id = cc.id
+            INNER JOIN t_as_service svc ON cc.service_id = svc.id AND svc.is_valid = 1
+            INNER JOIN t_educl_term term ON svc.term_id = term.id AND term.is_valid = 1
+            INNER JOIN t_as_teacher t ON sd.teacher_id = t.id
+            LEFT JOIN t_as_course_category cat ON cc.category_id = cat.id
+            <where>
+                sd.is_valid = 1
+                AND cc.is_valid = 1
+                AND t.is_valid = 1
+                AND sd.id = #{sessionId}
+                AND sd.teacher_id = #{teacherId}
+            </where>
+            LIMIT 1
+    </select>
+
+    <!-- 分页查询学生今日课程 -->
+    <select id="pageStudentTodayCourse" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsStudentTodayCourseVO">
+        SELECT
+            term.id AS termId,
+            term.term_name AS termName,
+            sd.id AS sessionId,
+            sd.start_time AS startTime,
+            sd.end_time AS endTime,
+            cc.course_class_name AS courseClassName,
+            t.teacher_name AS teacherName,
+            g.grade_name AS gradeName,
+            sd.place_name AS placeName,
+            sd.session_date AS sessionDate
+        FROM
+            t_as_student_destination dest
+        INNER JOIN t_as_course_session sd ON dest.session_id = sd.id
+        INNER JOIN t_as_course_class cc ON sd.course_class_id = cc.id
+        INNER JOIN t_as_service ser ON cc.service_id = ser.id AND ser.is_valid = 1
+        INNER JOIN t_educl_term term ON ser.term_id = term.id AND term.is_valid = 1
+        INNER JOIN t_as_enrollment ae ON sd.id = ae.session_id and dest.student_id = ae.student_id and ae.is_valid = 1
+        INNER JOIN t_as_teacher t ON sd.teacher_id = t.id
+        LEFT JOIN t_as_student stu ON dest.student_id = stu.id
+        LEFT JOIN t_educl_grade g ON stu.grade_id = g.id and g.is_valid = 1
+        <where>
+            dest.is_valid = 1
+            AND sd.is_valid = 1
+            AND cc.is_valid = 1
+            AND t.is_valid = 1
+            AND stu.is_valid = 1
+            and stu.register_status = 1
+            and ae.enroll_status in(1,3)
+            AND dest.school_id = #{query.schoolId}
+            AND dest.student_id = #{studentId}
+            AND stu.term_id = ser.term_id
+            AND ser.term_id = #{query.termId}
+            AND dest.destination_type = 1
+            AND DATE_FORMAT(sd.session_date, '%Y-%m-%d') = #{today}
+            AND sd.session_status IN (0, 1, 2)
+        </where>
+        ORDER BY
+            sd.start_time ASC
+    </select>
+
+    <!-- 查询学生今日课程详情 -->
+    <select id="pageStudentTodayCourseDetail" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsStudentTodayCourseVO">
+        SELECT
+        term.id AS termId,
+        term.term_name AS termName,
+        sd.id AS sessionId,
+        sd.start_time AS startTime,
+        sd.end_time AS endTime,
+        cc.course_class_name AS courseClassName,
+        t.teacher_name AS teacherName,
+        g.grade_name AS gradeName,
+        sd.place_name AS placeName,
+        sd.session_date AS sessionDate,
+        cc.id AS courseClassId,
+        sd.teacher_id AS teacherId,
+        cc.enroll_type AS enrollType,
+        CASE cc.enroll_type
+            WHEN 1 THEN '公开报名'
+            WHEN 2 THEN '邀请报名'
+            WHEN 3 THEN '行政班安排'
+        END AS enrollTypeName,
+        cat.category_name AS categoryName
+        FROM
+        t_as_student_destination dest
+        INNER JOIN t_as_course_session sd ON dest.session_id = sd.id
+        INNER JOIN t_as_course_class cc ON sd.course_class_id = cc.id
+        INNER JOIN t_as_service ser ON cc.service_id = ser.id AND ser.is_valid = 1
+        INNER JOIN t_educl_term term ON ser.term_id = term.id AND term.is_valid = 1
+        INNER JOIN t_as_teacher t ON sd.teacher_id = t.id
+        LEFT JOIN t_as_student stu ON dest.student_id = stu.id
+        LEFT JOIN t_educl_grade g ON stu.grade_id = g.id and g.is_valid = 1
+        LEFT JOIN t_as_course_category cat ON cc.category_id = cat.id and cat.is_valid = 1
+        <where>
+            dest.is_valid = 1
+            AND sd.is_valid = 1
+            AND cc.is_valid = 1
+            AND t.is_valid = 1
+            AND stu.is_valid = 1
+            AND dest.school_id = #{schoolId}
+            AND dest.student_id = #{studentId}
+            AND stu.term_id = ser.term_id
+            AND sd.id = #{sessionId}
+            AND dest.destination_type = 1
+            <if test="today != null">
+                AND DATE_FORMAT(sd.session_date, '%Y-%m-%d') = #{today}
+            </if>
+            AND sd.session_status IN (0, 1, 2)
+        </where>
+        ORDER BY
+        sd.start_time ASC
+    </select>
+
+    <!-- 分页查询学生课次（根据请假时间） -->
+    <select id="pageStudentSessions" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsStudentSessionVO">
+        SELECT
+        sd.id AS sessionId,
+        cc.course_class_name AS courseClassName,
+        sd.session_date AS sessionDate,
+        sd.start_time,
+        sd.end_time
+        FROM
+        t_as_student_destination dest
+        INNER JOIN t_as_course_session sd ON dest.session_id = sd.id
+        INNER JOIN t_as_course_class cc ON sd.course_class_id = cc.id
+        INNER JOIN t_as_service svc ON cc.service_id = svc.id AND svc.is_valid = 1
+        INNER JOIN t_educl_term term ON svc.term_id = term.id AND term.is_valid = 1
+        INNER JOIN t_as_student stu ON dest.student_id = stu.id AND stu.is_valid = 1 AND stu.term_id = svc.term_id
+        INNER JOIN t_as_enrollment ae ON sd.id = ae.session_id and dest.student_id = ae.student_id and ae.is_valid = 1
+        <where>
+            dest.is_valid = 1
+            AND sd.is_valid = 1
+            AND cc.is_valid = 1
+            and ae.enroll_status in(1,3)
+            AND dest.student_id = #{studentId}
+            AND sd.school_id = #{query.schoolId}
+            AND svc.term_id = #{query.termId}
+            AND dest.destination_type = 1
+            AND sd.session_start_date &gt; NOW()
+            <if test="query.sessionStartDate != null and query.sessionEndDate != null">
+                AND sd.session_start_date &lt;= DATE_FORMAT(#{query.sessionEndDate}, '%Y-%m-%d %H:%i')
+                AND sd.session_end_date &gt;= DATE_FORMAT(#{query.sessionStartDate}, '%Y-%m-%d %H:%i')
+            </if>
+        </where>
+        ORDER BY
+        sd.session_date DESC
+    </select>
+
+    <!-- 教师巡课任务-登记详情：查询指定课程班当天的课次列表 -->
+    <select id="listPatrolTodaySessionItems" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsPatrolRegistrationDetailVO$SessionItem">
+        SELECT
+            sd.id AS sessionId,
+            CONCAT(DATE_FORMAT(sd.start_time, '%H:%i'), '-', DATE_FORMAT(sd.end_time, '%H:%i')) AS classTime
+        FROM t_as_course_session sd
+        WHERE sd.is_valid = 1
+          AND sd.course_class_id = #{courseClassId}
+          AND DATE_FORMAT(sd.session_date, '%Y-%m-%d') = #{today}
+          AND sd.session_status IN (0, 1, 2)
+        ORDER BY sd.start_time ASC
+    </select>
+
+    <!-- 查询当天课次关联的作息时间段列表（含课次ID） -->
+    <select id="listTodaySchedulePeriods" resultType="com.sxkj.edu.module.afterschool.domain.dto.AsSessionPeriodDTO">
+        SELECT
+            cs.school_id,
+            cs.id AS session_id,
+            sp.start_time,
+            sp.end_time
+        FROM t_as_course_session cs
+        INNER JOIN t_as_schedule_period sp ON cs.schedule_period_id = sp.id AND sp.is_valid = 1
+        WHERE cs.is_valid = 1
+          AND cs.schedule_period_id IS NOT NULL AND cs.is_operate_attend = 0
+          AND DATE_FORMAT(cs.session_date, '%Y-%m-%d') = #{today}
+        ORDER BY sp.start_time ASC
+    </select>
+
+    <!-- 根据学生ID和课次ID查询学生名称、课程班名称、作息时间段 -->
+    <select id="getSessionStudentInfo" resultType="com.sxkj.edu.module.afterschool.domain.dto.AsSessionStudentDTO">
+        SELECT
+            stu.student_name,
+            cc.course_class_name,
+            sp.start_time,
+            sp.end_time,
+            t.user_id teacherUserId
+        FROM t_as_course_session cs
+        INNER JOIN t_as_course_class cc ON cs.course_class_id = cc.id AND cc.is_valid = 1
+        INNER JOIN t_as_schedule_period sp ON cs.schedule_period_id = sp.id AND sp.is_valid = 1
+        INNER JOIN t_as_student stu ON stu.id = #{studentId} AND stu.is_valid = 1 and stu.register_status = 1
+        LEFT JOIN t_educl_class ec ON ec.id = stu.class_id AND ec.is_valid = 1
+        LEFT JOIN t_as_teacher t ON t.id = ec.head_teacher_id AND t.is_valid = 1
+        WHERE cs.id = #{sessionId}
+          AND cs.is_valid = 1
+        LIMIT 1
+    </select>
+
+    <!-- 查询指定课次需要参加的学生列表（去向为课程班），含班主任用户ID -->
+    <select id="getSessionStudents" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsAttendanceStudentVO">
+        SELECT
+            cs.id AS sessionId,
+            s.id AS studentId,
+            s.student_name,
+            s.student_no,
+            cs.session_date,
+            DATE_FORMAT(cs.start_time, '%H:%i') AS startTime,
+            DATE_FORMAT(cs.end_time, '%H:%i') AS endTime,
+            sd.destination_type AS destinationType,
+            t.user_id AS headTeacherUserId,
+            cc.course_class_name AS courseClassName,
+            cs.teacher_id AS teacherId
+        FROM t_as_student_destination sd
+        INNER JOIN t_as_course_session cs ON sd.session_id = cs.id AND cs.is_valid = 1
+        LEFT JOIN t_as_course_class cc ON cs.course_class_id = cc.id AND cc.is_valid = 1
+        INNER JOIN t_as_student s ON sd.student_id = s.id AND s.is_valid = 1 and s.register_status = 1
+        LEFT JOIN t_educl_class ec ON ec.id = s.class_id AND ec.is_valid = 1
+        LEFT JOIN t_as_teacher t ON t.id = ec.head_teacher_id AND t.is_valid = 1
+        WHERE sd.session_id = #{sessionId}
+          AND sd.is_valid = 1
+          and s.register_status = 1
+          AND sd.destination_type = 1
+    </select>
+
+    <!-- 教师课程反馈-根据课次ID查询学生列表 -->
+    <select id="listStudentsBySessionId" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsTeacherFeedbackStudentVO">
+        SELECT
+            term.id AS termId,
+            term.term_name AS termName,
+            stu.id AS studentId,
+            stu.student_name AS studentName,
+            stu.student_no AS studentNo
+        FROM t_as_student_destination sd
+        INNER JOIN t_as_course_session cs ON sd.session_id = cs.id AND cs.is_valid = 1
+        INNER JOIN t_as_course_class cc ON cs.course_class_id = cc.id AND cc.is_valid = 1
+        INNER JOIN t_as_service svc ON cc.service_id = svc.id AND svc.is_valid = 1
+        INNER JOIN t_educl_term term ON svc.term_id = term.id AND term.is_valid = 1
+        INNER JOIN t_as_student stu ON sd.student_id = stu.id AND stu.is_valid = 1
+        WHERE sd.session_id = #{sessionId}
+          AND sd.is_valid = 1
+          AND sd.destination_type = 1
+          AND stu.term_id = svc.term_id
+          and stu.register_status = 1
+        ORDER BY stu.student_no ASC
+    </select>
+
+    <!-- 根据课次ID和学校ID查询课程班名称 -->
+    <select id="getCourseClassNameBySession" resultType="java.lang.String">
+        SELECT cc.course_class_name
+        FROM t_as_course_session cs
+        INNER JOIN t_as_course_class cc ON cs.course_class_id = cc.id AND cc.is_valid = 1
+        WHERE cs.id = #{sessionId}
+          AND cs.school_id = #{schoolId}
+          AND cs.is_valid = 1
+        LIMIT 1
+    </select>
+
+    <!-- 根据课次ID列表查询课程详情 -->
+    <select id="queryCourseDetBySessionIds" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsLeaveRequestManagerQueryCourseDetVO">
+        SELECT
+            cc.course_class_name AS courseClassName,
+            t.teacher_name AS teacherName,
+            cc.enroll_type AS enrollType,
+            DATE_FORMAT(cs.session_date, '%Y-%m-%d') AS sessionDate,
+            DATE_FORMAT(cs.start_time, '%H:%i') AS sessionStartTime,
+            DATE_FORMAT(cs.end_time, '%H:%i') AS sessionEndTime
+        FROM t_as_course_session cs
+        INNER JOIN t_as_course_class cc ON cs.course_class_id = cc.id AND cc.is_valid = 1
+        LEFT JOIN t_as_teacher t ON cs.teacher_id = t.id AND t.is_valid = 1
+        WHERE cs.is_valid = 1
+            AND cs.id IN
+        <foreach collection="sessionIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        ORDER BY cs.session_date ASC, cs.start_time ASC
+    </select>
+
+</mapper>

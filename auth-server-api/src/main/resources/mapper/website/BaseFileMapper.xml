@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.mapper.website.BaseFileMapper">
+
+    <select id="queryPage" resultType="com.sxkj.edu.domain.base.BaseFilePageVo">
+        SELECT
+        id,
+        file_name fileName,
+        menu_type menuType,
+        file_url fileUrl,
+        upload_date uploadDate,
+        file_type fileType
+        FROM t_base_file
+        <where>
+            is_valid = 1
+            <if test="query.startTime != null and query.endTime != null">
+                AND upload_date between #{query.startTime} and #{query.endTime}
+            </if>
+            <if test="query.fileName != null and query.fileName != ''">
+                AND file_name like concat('%', #{query.fileName}, '%')
+            </if>
+            <if test="query.menuType != null and query.menuType != ''">
+                AND menu_type like concat ('%',#{query.menuType}, '%')
+            </if>
+        </where>
+        order by upload_date desc
+    </select>
+</mapper>

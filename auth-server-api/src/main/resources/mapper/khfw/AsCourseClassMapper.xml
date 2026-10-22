@@ -1,0 +1,549 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.afterschool.mapper.AsCourseClassMapper">
+
+    <!-- 学生实际出勤口径：正常、迟到、早退。状态编码由服务层统一传入。 -->
+    <sql id="studentPresentStatusCondition">
+        ar.attendance_status IN
+        <foreach collection="presentStatusCodes" item="statusCode" open="(" separator="," close=")">
+            #{statusCode}
+        </foreach>
+    </sql>
+
+    <!-- 课程班总出勤率表达式，列表和详情必须复用，避免统计公式分叉。 -->
+    <sql id="courseClassAttendanceRateExpression">
+        ROUND(
+            SUM(CASE WHEN <include refid="studentPresentStatusCondition"/> THEN 1 ELSE 0 END)
+                * 100.0 / NULLIF(COUNT(ar.id), 0),
+            2
+        )
+    </sql>
+
+    <!-- 课程班总出勤率数据源，只统计有效课次和有效学生考勤记录。 -->
+    <sql id="courseClassAttendanceSource">
+        FROM t_as_attendance_record ar
+        INNER JOIN t_as_course_session cs ON ar.session_id = cs.id AND cs.is_valid = 1
+        INNER JOIN t_as_course_class attendance_cc
+            ON cs.course_class_id = attendance_cc.id AND attendance_cc.is_valid = 1
+        WHERE ar.is_valid = 1
+          AND ar.target_type = 1
+    </sql>
+
+    <!-- 分页查询课程班列表 -->
+    <select id="pageQueryCourseClass" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsCourseClassPageVO">
+        SELECT
+            cc.id,
+            srv.service_name AS serviceName,
+            cc.course_class_code AS courseClassCode,
+            cc.course_class_name AS courseClassName,
+            cat.category_name AS categoryName,
+            CASE
+                WHEN cc.enroll_type = 3
+                    AND IFNULL(JSON_LENGTH(cc.applicable_class_ids), 0) > 0
+                    THEN grade_scope.resolved_grade_ids
+                ELSE cc.applicable_grade_ids
+            END AS applicableGradeIds,
+            grade_scope.applicable_grade_names AS applicableGradeNames,
+            cc.enroll_type AS enrollType,
+            CASE cc.enroll_type
+                WHEN 1 THEN '公开报名'
+                WHEN 2 THEN '邀请报名'
+                WHEN 3 THEN '行政班安排'
+                ELSE '未知'
+            END AS enrollTypeDesc,
+            CONCAT(DATE_FORMAT(srv.course_start_date, '%Y-%m-%d'), '至', DATE_FORMAT(srv.course_end_date, '%Y-%m-%d')) AS courseCycle,
+            t.teacher_name AS teacherName,
+            cc.place_id AS placeId,
+            cc.teacher_id,
+            IFNULL(enrolled_count.student_count, 0) AS studentCount,
+            IFNULL(att_rate.attendance_rate, 0.00) AS attendanceRate,
+            te.term_name,
+            srv.term_id AS termId
+        FROM t_as_course_class cc
+        INNER JOIN t_as_service srv ON cc.service_id = srv.id AND srv.is_valid = 1
+        INNER JOIN t_educl_term te ON te.id = srv.term_id AND te.is_valid = 1
+        LEFT JOIN t_as_course_category cat ON cc.category_id = cat.id AND cat.is_valid = 1
+        LEFT JOIN t_as_teacher t ON cc.teacher_id = t.id AND t.is_valid = 1
+        LEFT JOIN (
+            SELECT
+                ccg.id AS course_class_id,
+                CONCAT(
+                    '[',
+                    GROUP_CONCAT(DISTINCT g.id ORDER BY g.sort_no, g.id SEPARATOR ','),
+                    ']'
+                ) AS resolved_grade_ids,
+                GROUP_CONCAT(
+                    DISTINCT g.grade_name ORDER BY g.sort_no, g.id SEPARATOR ','
+                ) AS applicable_grade_names
+            FROM t_as_course_class ccg
+            LEFT JOIN t_educl_grade g ON g.is_valid = 1
+                AND g.school_id = ccg.school_id
+                AND (
+                    (
+                        ccg.enroll_type = 3
+                        AND IFNULL(JSON_LENGTH(ccg.applicable_class_ids), 0) > 0
+                        AND EXISTS (
+                            SELECT 1
+                            FROM t_educl_class ec_scope
+                            WHERE ec_scope.is_valid = 1
+                                AND ec_scope.school_id = ccg.school_id
+                                AND ec_scope.grade_id = g.id
+                                AND JSON_CONTAINS(
+                                    ccg.applicable_class_ids,
+                                    CAST(ec_scope.id AS JSON)
+                                )
+                        )
+                    )
+                    OR (
+                        ccg.enroll_type IN (1, 2)
+                        AND JSON_CONTAINS(
+                            ccg.applicable_grade_ids,
+                            CAST(g.id AS JSON)
+                        )
+                    )
+                    OR (
+                        ccg.enroll_type = 3
+                        AND IFNULL(JSON_LENGTH(ccg.applicable_class_ids), 0) = 0
+                        AND JSON_CONTAINS(
+                            ccg.applicable_grade_ids,
+                            CAST(g.id AS JSON)
+                        )
+                    )
+                )
+            WHERE ccg.is_valid = 1
+                AND ccg.school_id = #{query.schoolId}
+            GROUP BY ccg.id
+        ) grade_scope ON cc.id = grade_scope.course_class_id
+        LEFT JOIN (
+            SELECT
+                e.course_class_id,
+                COUNT(DISTINCT e.student_id) AS student_count
+            FROM t_as_enrollment e
+            INNER JOIN t_as_student stu ON e.student_id = stu.id
+                AND stu.is_valid = 1
+                AND stu.register_status = 1
+            WHERE e.is_valid = 1
+                AND e.session_id IS NOT NULL
+                AND e.enroll_status IN (1, 3)
+            GROUP BY e.course_class_id
+        ) enrolled_count ON cc.id = enrolled_count.course_class_id
+        LEFT JOIN (
+            SELECT
+                attendance_cc.id AS course_class_id,
+                <include refid="courseClassAttendanceRateExpression"/> AS attendance_rate
+            <include refid="courseClassAttendanceSource"/>
+            GROUP BY attendance_cc.id
+        ) att_rate ON cc.id = att_rate.course_class_id
+        WHERE cc.is_valid = 1
+            AND cc.school_id = #{query.schoolId}
+            AND srv.service_status IN (1, 2, 3)
+        <if test="query.courseClassName != null and query.courseClassName != ''">
+            AND cc.course_class_name LIKE CONCAT('%', #{query.courseClassName}, '%')
+        </if>
+        <if test="query.categoryId != null and query.categoryId != 0">
+            AND cc.category_id = #{query.categoryId}
+        </if>
+        <if test="query.categoryIdList != null and query.categoryIdList.size > 0">
+            AND cc.category_id IN
+            <foreach collection="query.categoryIdList" item="id" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+        </if>
+        <if test="query.enrollType != null and query.enrollType != 0">
+            AND cc.enroll_type = #{query.enrollType}
+        </if>
+        <if test="query.gradeId != null and query.gradeId != 0">
+            AND (
+                (
+                    cc.enroll_type = 3
+                    AND IFNULL(JSON_LENGTH(cc.applicable_class_ids), 0) > 0
+                    AND EXISTS (
+                        SELECT 1
+                        FROM t_educl_class ec_filter
+                        WHERE ec_filter.is_valid = 1
+                            AND ec_filter.school_id = cc.school_id
+                            AND ec_filter.grade_id = #{query.gradeId}
+                            AND JSON_CONTAINS(
+                                cc.applicable_class_ids,
+                                CAST(ec_filter.id AS JSON)
+                            )
+                    )
+                )
+                OR (
+                    cc.enroll_type IN (1, 2)
+                    AND JSON_CONTAINS(
+                        cc.applicable_grade_ids,
+                        CAST(#{query.gradeId} AS JSON)
+                    )
+                )
+                OR (
+                    cc.enroll_type = 3
+                    AND IFNULL(JSON_LENGTH(cc.applicable_class_ids), 0) = 0
+                    AND JSON_CONTAINS(
+                        cc.applicable_grade_ids,
+                        CAST(#{query.gradeId} AS JSON)
+                    )
+                )
+            )
+        </if>
+        <if test="query.teacherId != null and query.teacherId != 0">
+            AND cc.teacher_id = #{query.teacherId}
+        </if>
+        <if test="query.termId != null and query.termId != 0">
+            AND srv.term_id = #{query.termId}
+        </if>
+        ORDER BY cc.course_class_name desc,cc.create_time DESC
+    </select>
+
+    <!-- 查询课程班总出勤率，与课程班列表复用同一出勤状态口径。 -->
+    <select id="queryCourseClassAttendanceRate" resultType="java.lang.Double">
+        SELECT IFNULL(
+            <include refid="courseClassAttendanceRateExpression"/>,
+            0.00
+        )
+        <include refid="courseClassAttendanceSource"/>
+          AND attendance_cc.id = #{courseClassId}
+    </select>
+
+    <!-- 课后服务课程班下拉筛选（巡课周期内存在课次的课程班） -->
+    <select id="listDropdownByServiceDateRange" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsCourseClassDropdownVO">
+        SELECT
+            cc.id                AS id,
+            cc.course_class_name AS courseClassName,
+            cc.service_id        AS serviceId
+        FROM t_as_course_class cc
+        INNER JOIN t_as_service srv ON cc.service_id = srv.id AND srv.is_valid = 1
+        WHERE cc.is_valid = 1
+        AND srv.course_end_date &gt;= DATE(NOW())
+            <if test="ao.currentDate != null">
+            AND EXISTS (
+                SELECT 1 FROM t_as_course_session cs_date
+                WHERE cs_date.course_class_id = cc.id
+                  AND cs_date.is_valid = 1
+                  AND DATE_FORMAT(cs_date.session_date, '%Y-%m-%d') = DATE_FORMAT(#{ao.currentDate}, '%Y-%m-%d')
+                  AND TIMESTAMP(cs_date.session_date, cs_date.start_time) &lt;= NOW()
+            )
+            </if>
+            <if test="ao.startTime != null and ao.endTime != null">
+            AND EXISTS (
+                SELECT 1 FROM t_as_course_session cs
+                WHERE cs.course_class_id = cc.id
+                  AND cs.is_valid = 1
+                  AND TIMESTAMP(cs.session_date, cs.start_time) &gt;= #{ao.startTime}
+                  AND TIMESTAMP(cs.session_date, cs.end_time) &lt;= #{ao.endTime}
+            )
+            </if>
+            <if test="ao.schoolId != null">
+                AND cc.school_id = #{ao.schoolId}
+            </if>
+            <if test="ao.categoryIdList != null and ao.categoryIdList.size > 0">
+                AND cc.category_id IN
+                <foreach collection="ao.categoryIdList" open="(" close= ")" item="item" separator=","  >
+                    #{item}
+                </foreach>
+            </if>
+            <if test="ao.gradeIdList != null and ao.gradeIdList.size > 0">
+                AND (
+                <!-- 公开课、邀请课直接按适用年级筛选 -->
+                (cc.enroll_type IN (1, 2)AND (
+                <foreach collection="ao.gradeIdList" item="gid" separator=" OR ">
+                    JSON_CONTAINS(cc.applicable_grade_ids,CAST(#{gid} AS JSON))
+                </foreach>
+                ))
+                OR
+                <!-- 行政班课程根据适用行政班反查所属年级 -->
+                (cc.enroll_type = 3
+                AND EXISTS (SELECT 1 FROM t_educl_class ec WHERE ec.is_valid = 1 AND ec.school_id = cc.school_id
+                AND JSON_CONTAINS(cc.applicable_class_ids,CAST(ec.id AS JSON))
+                AND ec.grade_id IN
+                <foreach collection="ao.gradeIdList" item="gid" open="(" separator="," close=")">
+                    #{gid}
+                </foreach>
+                )))
+            </if>
+            <if test="ao.courseClassName != null and ao.courseClassName != ''">
+                AND cc.course_class_name LIKE CONCAT('%', #{ao.courseClassName}, '%')
+            </if>
+            <if test="ao.teacherId != null and ao.teacherId != 0">
+                AND cc.teacher_id = #{ao.teacherId}
+            </if>
+        ORDER BY cc.create_time DESC
+    </select>
+
+    <!-- 教师巡课任务-登记详情（查询课程班地点和教师姓名） -->
+    <select id="getPatrolRegistrationDetail" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsPatrolRegistrationDetailVO">
+        SELECT
+            cc.place_id AS placeId,
+            t.teacher_name AS teacherName,
+            cc.teacher_id AS teacherId
+        FROM t_as_course_class cc
+        LEFT JOIN t_as_teacher t ON cc.teacher_id = t.id AND t.is_valid = 1
+        WHERE cc.id = #{courseClassId}
+          AND cc.is_valid = 1
+        LIMIT 1
+    </select>
+
+    <!-- 查询本次 save-courses 未提交的原课程班，作为待软删候选 -->
+    <select id="listRemovedCourseCandidates" resultType="com.sxkj.edu.module.afterschool.domain.entity.AsCourseClassEntity">
+        SELECT
+            *
+        FROM t_as_course_class
+        WHERE service_id = #{serviceId}
+          AND is_valid = 1
+        <if test="retainIds != null and retainIds.size > 0">
+          AND id NOT IN
+            <foreach collection="retainIds" item="id" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+        </if>
+        ORDER BY id ASC
+    </select>
+
+    <!-- 统计课程班有效报名记录数，用于删除安全校验 -->
+    <select id="countEnrollmentData" resultType="java.lang.Integer">
+        SELECT COUNT(1)
+        FROM t_as_enrollment
+        WHERE is_valid = 1
+          AND course_class_id = #{courseClassId}
+    </select>
+
+    <!-- 统计课程班有效学生去向记录数，用于删除安全校验 -->
+    <select id="countStudentDestinationData" resultType="java.lang.Integer">
+        SELECT COUNT(1)
+        FROM t_as_student_destination
+        WHERE is_valid = 1
+          AND course_class_id = #{courseClassId}
+    </select>
+
+    <!-- 统计课程班有效点名记录数，用于删除安全校验 -->
+    <select id="countAttendanceData" resultType="java.lang.Integer">
+        SELECT COUNT(1)
+        FROM t_as_attendance_record ar
+        INNER JOIN t_as_course_session cs ON ar.session_id = cs.id AND cs.is_valid = 1
+        WHERE ar.is_valid = 1
+          AND cs.course_class_id = #{courseClassId}
+    </select>
+
+    <!-- 统计课程班非未开始课次数，用于删除安全校验 -->
+    <select id="countStartedSession" resultType="java.lang.Integer">
+        SELECT COUNT(1)
+        FROM t_as_course_session
+        WHERE is_valid = 1
+          AND course_class_id = #{courseClassId}
+          AND session_status != 0
+    </select>
+
+    <!-- 软删除本次保存已移除且通过安全校验的课程班 -->
+    <update id="invalidateCourseClasses">
+        UPDATE t_as_course_class
+        SET is_valid = 0,
+            update_user = #{updateUser},
+            update_time = NOW()
+        WHERE is_valid = 1
+          AND id IN
+        <foreach collection="courseIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </update>
+
+    <!-- 软删除本次保存已移除课程班的排课规则 -->
+    <update id="invalidateCourseScheduleRules">
+        UPDATE t_as_course_schedule_rule
+        SET is_valid = 0,
+            update_user = #{updateUser},
+            update_time = NOW()
+        WHERE is_valid = 1
+          AND course_class_id IN
+        <foreach collection="courseIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </update>
+
+    <!-- 软删除本次保存已移除课程班下未开始的课次 -->
+    <update id="invalidateNotStartedCourseSessions">
+        UPDATE t_as_course_session
+        SET is_valid = 0,
+            update_user = #{updateUser},
+            update_time = NOW()
+        WHERE is_valid = 1
+          AND session_status = 0
+          AND course_class_id IN
+        <foreach collection="courseIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </update>
+
+    <!-- 统计课程班各报名方式数量 -->
+    <select id="countCourseClass" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsCourseClassCountVO">
+        SELECT
+            COUNT(*)                                                   AS allCount,
+            SUM(CASE WHEN cc.enroll_type = 1 THEN 1 ELSE 0 END)        AS publicEnrollCount,
+            SUM(CASE WHEN cc.enroll_type = 2 THEN 1 ELSE 0 END)        AS inviteEnrollCount,
+            SUM(CASE WHEN cc.enroll_type = 3 THEN 1 ELSE 0 END)        AS adminArrangeCount
+        FROM t_as_course_class cc
+        INNER JOIN t_as_service srv ON cc.service_id = srv.id AND srv.is_valid = 1
+        WHERE cc.is_valid = 1
+          AND srv.service_status IN (1, 2, 3)
+        <if test="query.schoolId != null">
+            AND cc.school_id = #{query.schoolId}
+        </if>
+        <if test="query.termId != null">
+            AND srv.term_id = #{query.termId}
+        </if>
+    </select>
+
+    <!-- 课程班课次考勤分页查询 -->
+    <select id="pageQuerySessionAttendance" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsSessionAttendancePageVO">
+        SELECT
+            cs.id AS sessionId,
+            cc.course_class_name AS courseClassName,
+            DATE_FORMAT(cs.session_date, '%Y-%m-%d') AS sessionDate,
+            CONCAT(DATE_FORMAT(cs.start_time, '%H:%i'), '-', DATE_FORMAT(cs.end_time, '%H:%i')) AS classTime,
+            IFNULL(session_student_count.student_count, 0) AS totalStudents,
+            SUM(CASE WHEN <include refid="studentPresentStatusCondition"/> THEN 1 ELSE 0 END) AS presentCount,
+            SUM(CASE WHEN ar.attendance_status = 4 THEN 1 ELSE 0 END) AS absentCount,
+            SUM(CASE WHEN ar.attendance_status = 2 THEN 1 ELSE 0 END) AS lateCount,
+            SUM(CASE WHEN ar.attendance_status = #{earlyLeaveStatusCode} THEN 1 ELSE 0 END) AS earlyLeaveCount,
+            SUM(CASE WHEN ar.attendance_status = 5 THEN 1 ELSE 0 END) AS leaveCount,
+            srv.term_id AS termId,
+            te.term_name AS termName
+        FROM t_as_course_session cs
+        INNER JOIN t_as_course_class cc ON cs.course_class_id = cc.id AND cc.is_valid = 1
+        INNER JOIN t_as_service srv ON cc.service_id = srv.id AND srv.is_valid = 1
+        INNER JOIN t_educl_term te ON te.id = srv.term_id AND te.is_valid = 1
+        LEFT JOIN (
+            SELECT
+                e.session_id,
+                COUNT(DISTINCT e.student_id) AS student_count
+            FROM t_as_enrollment e
+            INNER JOIN t_as_student stu ON e.student_id = stu.id
+                AND stu.is_valid = 1
+                AND stu.register_status = 1
+            WHERE e.is_valid = 1
+                AND e.session_id IS NOT NULL
+                AND e.enroll_status IN (1, 3)
+            GROUP BY e.session_id
+        ) session_student_count ON cs.id = session_student_count.session_id
+        LEFT JOIN t_as_attendance_record ar ON ar.session_id = cs.id AND ar.is_valid = 1 AND ar.target_type = 1
+        WHERE cs.is_valid = 1
+            AND cc.school_id = #{query.schoolId}
+            AND cc.id = #{query.courseClassId}
+        GROUP BY cs.id, cc.course_class_name, session_student_count.student_count,
+                 cs.session_date, cs.start_time, cs.end_time, srv.term_id, te.term_name
+        ORDER BY cs.session_date ASC, cs.start_time ASC
+    </select>
+
+    <!-- 根据课程班ID查询课次详情集合 -->
+    <select id="listSessionDetailByCourseClassId" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsCourseClassSessionDetailVO">
+        SELECT
+            cs.id AS sessionId,
+            srv.term_id AS termId,
+            te.term_name AS termName,
+            cs.session_date AS sessionDate,
+            sp.section_no AS sectionNo,
+            sp.section_name AS sectionName,
+            CASE cs.week_day
+                WHEN 1 THEN '周一'
+                WHEN 2 THEN '周二'
+                WHEN 3 THEN '周三'
+                WHEN 4 THEN '周四'
+                WHEN 5 THEN '周五'
+                WHEN 6 THEN '周六'
+                WHEN 7 THEN '周日'
+                ELSE '未知'
+            END AS weekDayName,
+            cs.start_time AS startTime,
+            cs.end_time AS endTime,
+            t.teacher_name AS teacherName
+        FROM t_as_course_session cs
+        INNER JOIN t_as_course_class cc ON cs.course_class_id = cc.id AND cc.is_valid = 1
+        LEFT JOIN t_as_service srv ON cc.service_id = srv.id AND srv.is_valid = 1
+        LEFT JOIN t_educl_term te ON srv.term_id = te.id AND te.is_valid = 1
+        LEFT JOIN t_as_schedule_period sp ON cs.schedule_period_id = sp.id AND sp.is_valid = 1
+        LEFT JOIN t_as_teacher t ON cs.teacher_id = t.id AND t.is_valid = 1
+        WHERE cs.is_valid = 1
+            AND cc.id = #{query.courseClassId}
+            AND cc.school_id = #{query.schoolId}
+        ORDER BY cs.session_date ASC, cs.start_time ASC
+    </select>
+
+    <!-- 根据课程班ID列表查询今天有课的课程班 -->
+    <select id="listCourseClassWithTodaySession" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsCourseClassDropdownVO">
+        SELECT
+            cc.id                AS id,
+            cc.course_class_name AS courseClassName,
+            cc.service_id        AS serviceId
+        FROM t_as_course_class cc
+        WHERE cc.is_valid = 1
+          AND cc.id IN
+        <foreach collection="courseClassIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+          AND EXISTS (
+              SELECT 1 FROM t_as_course_session cs_today
+              WHERE cs_today.course_class_id = cc.id
+                AND cs_today.is_valid = 1
+                AND DATE_FORMAT(cs_today.session_date, '%Y-%m-%d') = DATE_FORMAT(NOW(), '%Y-%m-%d')
+                AND TIMESTAMP(cs_today.session_date, cs_today.start_time) &lt;= NOW()
+          )
+        ORDER BY cc.create_time DESC
+    </select>
+    <select id="queryStudentByCourseClassIds"
+            resultType="com.sxkj.edu.module.afterschool.domain.vo.TeacherNoticeStudentVO">
+        SELECT DISTINCT
+            stu.id AS studentId,
+            gs.guardian_user_id AS userId
+        FROM
+        t_as_course_class cc
+            INNER JOIN t_as_student_destination sd on sd.course_class_id = cc.id and sd.is_valid = 1
+            INNER JOIN t_as_student stu ON stu.id =sd.student_id and stu.register_status = 1 and stu.is_valid = 1
+            INNER JOIN t_as_guardian_student gs on gs.student_identity_id = stu.student_identity_id
+                and gs.is_valid = 1 and bind_status = 1
+        WHERE
+            cc.is_valid = 1 and cc.school_id = #{schoolId} and gs.guardian_user_id is not NULL
+          AND cc.id IN
+        <foreach collection="noticeObjIdList" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        <if test="studentIds != null and studentIds.size > 0">
+            AND stu.id IN
+            <foreach item="studentId" collection="studentIds" separator="," open="(" close=")">
+                #{studentId}
+            </foreach>
+        </if>
+    </select>
+
+    <select id="countCourseClassBySchoolId" resultType="java.lang.Long">
+        SELECT count( DISTINCT  s.id)
+        FROM
+            t_as_student s,
+            t_as_enrollment a
+        WHERE
+            s.id = a.student_id
+          AND a.course_class_id = #{courseId}
+          AND a.school_id = #{schoolId}
+          AND a.enroll_status IN ( 1, 3 )
+          and a.is_valid = 1
+          and s.register_status =1
+    </select>
+
+    <!-- 根据学校、课程班ID列表批量查询有效学生人数之和（按 (cc_id, student_id) 元组去重，等价于每个 cc 内分别去重再累加） -->
+    <select id="sumCourseClassPersonByIds" resultType="java.lang.Long">
+        SELECT COUNT(DISTINCT a.course_class_id, a.student_id)
+        FROM
+            t_as_student s,
+            t_as_enrollment a
+        WHERE
+            s.id = a.student_id
+          AND a.school_id = #{schoolId}
+          AND a.enroll_status IN ( 1, 3 )
+          AND a.is_valid = 1
+          AND s.is_valid = 1
+          AND s.register_status = 1
+          AND a.course_class_id IN
+          <foreach collection="courseClassIds" item="ccId" open="(" separator="," close=")">
+              #{ccId}
+          </foreach>
+    </select>
+
+</mapper>

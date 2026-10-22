@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.afterschool.mapper.AsTeacherClassMapper">
+
+    <select id="queryTeacherClassByTeacherName"
+            resultType="com.sxkj.edu.module.afterschool.domain.dto.AsTeacherClassQueryDto">
+        SELECT
+            t.id,
+            t.teacher_name,
+            cl.id classId,
+            cl.class_name
+        FROM
+            t_educl_class cl,
+            t_as_teacher_class c,
+            t_as_teacher t
+        WHERE
+            cl.id = c.class_id
+          AND cl.head_teacher_id = t.id
+          AND c.bind_type = 1
+          AND cl.is_valid = 1
+          AND c.is_valid = 1
+          AND t.is_valid = 1
+          and c.school_id = #{schoolId}
+          and cl.id = #{classId}
+            limit 1
+    </select>
+    <select id="listClassStudentInfo" resultType="com.sxkj.edu.domain.vo.AsHeadTeacherClassStudentInfoVO">
+        SELECT
+        CONCAT(IFNULL(g.grade_name, ''), IFNULL(c.class_name, '')) AS className,
+        stu.student_no AS studentNo,
+        stu.student_name AS studentName,
+        stu.gender
+        FROM t_as_teacher_class tc
+        INNER JOIN t_educl_class c ON c.id = tc.class_id AND c.is_valid = 1
+        LEFT JOIN t_educl_grade g ON g.id = c.grade_id AND g.is_valid = 1
+        INNER JOIN t_as_student stu ON stu.class_id = c.id AND stu.is_valid = 1
+        AND stu.register_status = 1
+        WHERE tc.teacher_id = #{teacherId}
+        AND tc.school_id = #{schoolId}
+        AND tc.bind_type = 1
+        AND tc.is_valid = 1
+        <if test="classId != null and classId != 0">
+            AND c.id = #{classId}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (stu.student_name LIKE CONCAT('%', #{keyword}, '%')
+            OR stu.student_no LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        ORDER BY stu.student_no ASC
+    </select>
+</mapper>

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.afterschool.mapper.AsTeacherSubjectMapper">
+
+    <select id="listSubjectByTeacherId" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsSubjectVO">
+        SELECT
+            s.id,
+            s.subject_name,
+            s.grade_id,
+            g.grade_name
+        FROM t_teacher_subject ts
+        INNER JOIN t_as_subject s ON ts.subject_id = s.id AND s.is_valid = 1 and s.enabled = 1
+        LEFT JOIN t_educl_grade g ON s.grade_id = g.id AND g.is_valid = 1
+        WHERE ts.teacher_id = #{teacherId}
+          AND ts.is_valid = 1
+        ORDER BY g.sort_no ASC
+    </select>
+
+    <!-- 批量查询教师教学科目，返回teacherId用于按教师分组 -->
+    <select id="listSubjectsByTeacherIds" resultType="com.sxkj.edu.module.afterschool.domain.vo.AsSubjectVO">
+        SELECT
+        ts.teacher_id AS teacherId,
+        s.id,
+        s.subject_name,
+        s.grade_id,
+        g.grade_name
+        FROM t_teacher_subject ts
+        INNER JOIN t_as_subject s ON ts.subject_id = s.id AND s.is_valid = 1 AND s.enabled = 1
+        LEFT JOIN t_educl_grade g ON s.grade_id = g.id AND g.is_valid = 1
+        WHERE ts.teacher_id IN
+        <foreach collection="teacherIds" item="teacherId" open="(" separator="," close=")">
+            #{teacherId}
+        </foreach>
+        AND ts.is_valid = 1
+        ORDER BY ts.teacher_id, g.sort_no ASC
+    </select>
+</mapper>

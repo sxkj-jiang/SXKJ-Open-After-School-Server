@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sxkj.edu.module.mapper.website.TPortalProtocolMapper">
+
+    <select id="queryProtocolPage" resultType="com.sxkj.edu.domain.mult.vo.TPortalProtocolVO">
+        select
+            id,
+            protocol_name,
+            protocol_code,
+            protocol_type,
+            version_num,
+            is_enable,
+            create_time,
+            update_time
+        from t_portal_protocol
+        where is_valid = 1
+        <if test="query.protocolName != null and query.protocolName != ''">
+            and protocol_name like concat('%',#{query.protocolName},'%')
+        </if>
+        <if test="query.protocolCode != null and query.protocolCode != ''">
+            and protocol_code like concat('%',#{query.protocolCode},'%')
+        </if>
+        <if test="query.protocolType != null">
+            and protocol_type = #{query.protocolType}
+        </if>
+        <if test="query.updateTimeStart != null and query.updateTimeEnd != null">
+            and update_time between #{query.updateTimeStart} and #{query.updateTimeEnd}
+        </if>
+        order by create_time desc
+    </select>
+</mapper>

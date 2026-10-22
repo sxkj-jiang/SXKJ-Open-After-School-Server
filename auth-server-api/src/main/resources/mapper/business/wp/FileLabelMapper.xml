@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.sxkj.edu.module.business.dao.WpFileLabelDao">
+
+    <select id="selectFileLabelPage" parameterType="com.sxkj.edu.domain.ao.wp.QueryFileLabelPageAo" resultType="com.sxkj.edu.domain.vo.wp.QueryFileLabelDetailPageVO">
+        SELECT c.id,
+        c.user_id userId,
+        u.actual_name userName,
+        c.file_md5 fileMd5,
+        c.file_name fileName,
+        c.file_url fileUrl,
+        c.file_size fileSize,
+        c.file_path filePath,
+        c.is_dir isDir,
+        c.create_time uploadTime,
+        c.is_valid isValid,
+        c.extend_name extendName,
+        c.storage_type storageType,
+        f.id labelId,
+        f.label_name labelName
+        FROM t_wp_user_file c, t_wp_user_file_label ufl, t_base_user u,t_wp_file_label f
+        WHERE u.id = c.user_id and c.id = ufl.file_id and f.id = ufl.label_id
+        and u.is_valid =1
+        and c.is_valid =1 and f.is_valid =1 and ufl.is_valid = 1
+        and f.id = #{query.labelId}
+        <if test="query.keyword != null and query.keyword != ''">
+            <bind name="likeName" value="concat('%', query.keyword, '%')"></bind>
+            AND (u.actual_name like #{likeName} or c.file_name like #{likeName})
+        </if>
+        order BY c.create_time desc
+    </select>
+
+    <select id="selectFileLabelCountNum" resultType="com.sxkj.edu.domain.vo.wp.QueryFileLabelCountVO">
+        SELECT fl.id id,
+        fl.label_name labelName,
+        <!-- cs.city_state_name cityStateName, -->
+        count(uf.id) count
+        FROM t_wp_file_label fl
+        left join t_wp_user_file_label ufl on ufl.label_id = fl.id and ufl.is_valid = 1
+        left join t_wp_user_file uf on uf.id =  ufl.file_id and uf.is_valid = 1
+        left join t_base_user u on u.id = fl.user_id
+        WHERE fl.is_valid = 1 and u.is_valid = 1
+        <!-- and cs.is_del = 0 -->
+        <if test="userId != null and userId !=0">
+            and fl.user_id = #{userId}
+        </if>
+        <if test="schoolId != null and schoolId !=0">
+            and u.school_id = #{schoolId}
+        </if>
+        group by id, labelName
+        order by count desc
+    </select>
+
+    <select id="selectAllFileLabel" resultType="com.sxkj.edu.module.business.entity.wp.WpFileLabelPo">
+        SELECT fl.id,
+        fl.user_id userId,
+        fl.label_name labelName,
+        fl.label_type labelType,
+        fl.color_value colorValue
+        FROM t_wp_file_label fl
+        left join t_base_user u on u.id = fl.user_id     
+        WHERE fl.is_valid = 1 and u.is_valid = 1 
+        <if test="userId != null and userId !=0">
+            and fl.user_id = #{userId}
+        </if>
+        <if test="schoolId != null and schoolId !=0">
+            and u.school_id = #{schoolId}
+        </if>
+    </select>
+</mapper>

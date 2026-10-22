@@ -1,0 +1,48 @@
+spring:
+  profiles:
+    # 动态选择yml文件的key
+    active: dev
+  application:
+    name: edu-portal
+  jackson:
+    time-zone: GMT+7
+  servlet:
+    multipart:
+      max-file-size: 1120MB
+      max-request-size: 1120MB
+  #定时任务配置
+  task:
+    scheduling:
+      # 任务调度线程池大小，默认 1
+      pool:
+        size: 1
+      # 调度线程名称前缀 默认 scheduling-
+      thread-name-prefix: scheduling-
+      shutdown:
+        # 线程池关闭时，是否等待所有任务完成
+        await-termination: false
+        # 调度线程关闭前最大等待时间
+        await-termination-period: 10s
+
+
+#logback输出日志配置
+logging:
+  config: classpath:logback-spring.xml
+  level:
+    root: info #日志级别 root表示所有包，也可以单独配置具体包 fatal error warn info debug trace off
+#  控制屏蔽对应包的日志打印
+#    com.springboot.sixmonth.controller: 'off'
+#    com.sxkj.edu.module.business.dao: debug
+
+mybatis-plus:
+  type-aliases-package: com.sxkj.edu.module
+  check-config-location: false
+  mapper-locations:  classpath*:/mapper/**/*.xml
+  # 打印sql
+#  configuration:
+#    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+air:
+  global:
+    thread_pool_core_size: 4
+    thread_pool_max_size: 6
